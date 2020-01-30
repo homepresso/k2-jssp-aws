@@ -1,20 +1,59 @@
-# Introduction 
-TODO: Give a short introduction of your project. Let this section explain the objectives or the motivation behind this project. 
+# K2 TypeScript Broker Template
 
-# Getting Started
-TODO: Guide users through getting your code up and running on their own system. In this section you can talk about:
-1.	Installation process
-2.	Software dependencies
-3.	Latest releases
-4.	API references
+This is demonstrates best-practices for developing a K2 Broker using TypeScript.
 
-# Build and Test
-TODO: Describe and show how to build your code and run the tests. 
+# Features
 
-# Contribute
-TODO: Explain how other users and developers can contribute to make your code better. 
+  - Full object model intellisense for making development easier
+  - Sample broker code that accesses jsonplaceholder.
+  - Sample unit tests with mocks and code coverage.
+  - RollupJS configuration for TypeScript.
 
-If you want to learn more about creating good readme files then refer the following [guidelines](https://www.visualstudio.com/en-us/docs/git/create-a-readme). You can also seek inspiration from the below readme files:
-- [ASP.NET Core](https://github.com/aspnet/Home)
-- [Visual Studio Code](https://github.com/Microsoft/vscode)
-- [Chakra Core](https://github.com/Microsoft/ChakraCore)
+## Getting Started
+
+This template requires [Node.js](https://nodejs.org/) v12.14.1+ to run.
+
+Install the dependencies and devDependencies:
+
+```bash
+npm install
+```
+
+See the documentation for [@k2oss/k2-broker-core](https://www.npmjs.com/package/@k2oss/k2-broker-core)
+for more information about how to use the broker SDK package.
+
+## Running Unit Tests
+To run the unit tests, run:
+
+```bash
+npm test
+```
+
+You can also use a development build, for debugging and coverage gutters:
+
+```bash
+npm run test:dev
+```
+
+You will find the code coverage results in [coverage/index.html](./coverage/index.html).
+
+## Building your bundled JS
+When you're ready to build your broker, run the following command
+
+```bash
+npm run build
+```
+
+You will find the results in the [dist/index.js](./dist/index.js).
+
+## Creating a service type
+Once you have a bundled .js file, upload it to your repository (anonymously
+accessible) and register the service type using the system SmartObject located
+at System > Management > SmartObjects > SmartObjects > JavaScript Service
+Provider and run the Create From URL method.
+
+### License
+
+MIT, found in the [LICENSE](./LICENSE) file.
+
+[www.k2.com](https://www.k2.com)
