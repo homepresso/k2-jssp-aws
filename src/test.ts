@@ -44,6 +44,15 @@ test('describe returns the hardcoded instance', async t => {
                         type: "read",
                         inputs: [ "com.k2.todo.id" ],
                         outputs: [ "com.k2.todo.id", "com.k2.todo.userId", "com.k2.todo.title", "com.k2.todo.completed" ]
+                    },
+                    "com.k2.todo.get.params": {
+                        displayName: "Get TODO",
+                        type: "read",
+                        parameters: {
+                            "com.k2.todo.pid" : { displayName: "param1", description: "Description Of Param 1", type: "number"} 
+                        },
+                        requiredParameters: [ "com.k2.todo.pid" ],
+                        outputs: [ "com.k2.todo.id" ]
                     }
                 }
             }
@@ -61,6 +70,26 @@ test('execute fails with the wrong parameters', async t => {
     error = await t.throwsAsync(Promise.resolve<void>(onexecute('com.k2.todo', 'test2', {}, {})));
     
     t.deepEqual(error.message, 'The method test2 is not supported.');
+
+    t.pass();
+});
+
+test('execute passes with method params', async t => {
+    let result: any = null;
+    function pr(r: any) {
+        result = r;
+    }
+
+    mock('postResult', pr);
+
+    await Promise.resolve<void>(onexecute(
+        'com.k2.todo', 'com.k2.todo.get.params', {
+            "com.k2.todo.pid": 456
+        }, {}, {}));
+
+    t.deepEqual(result, {
+        "com.k2.todo.id": 456
+    });
 
     t.pass();
 });
@@ -117,7 +146,7 @@ test('execute passes', async t => {
     await Promise.resolve<void>(onexecute(
         'com.k2.todo', 'com.k2.todo.get', {}, {
             "com.k2.todo.id": 123
-        }));
+        }, {}));
 
     t.deepEqual(xhr, {
         opened: {

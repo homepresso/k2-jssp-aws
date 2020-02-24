@@ -36,6 +36,15 @@ ondescribe = async function(): Promise<void> {
                         type: "read",
                         inputs: [ "com.k2.todo.id" ],
                         outputs: [ "com.k2.todo.id", "com.k2.todo.userId", "com.k2.todo.title", "com.k2.todo.completed" ]
+                    },
+                    "com.k2.todo.get.params": {
+                        displayName: "Get TODO",
+                        type: "read",
+                        parameters: {
+                            "com.k2.todo.pid" : { displayName: "param1", description: "Description Of Param 1", type: "number"} 
+                        },
+                        requiredParameters: [ "com.k2.todo.pid" ],
+                        outputs: [ "com.k2.todo.id" ]
                     }
                 }
             }
@@ -43,18 +52,19 @@ ondescribe = async function(): Promise<void> {
     });
 }
 
-onexecute = async function(objectName, methodName, _parameters, properties): Promise<void> {
+onexecute = async function(objectName, methodName, parameters, properties): Promise<void> {
     switch (objectName)
     {
-        case "com.k2.todo": await onexecuteTodo(methodName, properties); break;
+        case "com.k2.todo": await onexecuteTodo(methodName, properties, parameters); break;
         default: throw new Error("The object " + objectName + " is not supported.");
     }
 }
 
-async function onexecuteTodo(methodName: string, properties: SingleRecord): Promise<void> {
+async function onexecuteTodo(methodName: string, properties: SingleRecord, parameters: SingleRecord): Promise<void> {
     switch (methodName)
     {
         case "com.k2.todo.get": await onexecuteTodoGet(properties); break;
+        case "com.k2.todo.get.params": await onexecuteTodoGetWithParams(parameters); break;
         default: throw new Error("The method " + methodName + " is not supported.");
     }
 }
@@ -84,5 +94,20 @@ function onexecuteTodoGet(properties: SingleRecord): Promise<void> {
         xhr.open("GET", 'https://jsonplaceholder.typicode.com/todos/' + properties["com.k2.todo.id"]);
         xhr.setRequestHeader('test', 'test value');
         xhr.send();
+    });
+}
+
+function onexecuteTodoGetWithParams(parameters: SingleRecord): Promise<void> {
+    return new Promise<void>((resolve, reject) =>
+    {
+        try {
+            postResult({
+                "com.k2.todo.id": parameters["com.k2.todo.pid"]
+            });
+            resolve();
+        } catch (e) {
+            reject(e);
+        }
+        
     });
 }
