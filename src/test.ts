@@ -17,42 +17,42 @@ test('describe returns the hardcoded instance', async t => {
     
     t.deepEqual(schema, {
         objects: {
-            "com.k2.todo": {
+            "com_k2_todo": {
                 displayName: "TODO",
                 description: "Manages a TODO list",
                 properties: {
-                    "com.k2.todo.id": {
+                    "com_k2_todo_id": {
                         displayName: "ID",
                         type: "number"
                     },
-                    "com.k2.todo.userId": {
+                    "com_k2_todo_userId": {
                         displayName: "User ID",
                         type: "number"
                     },
-                    "com.k2.todo.title": {
+                    "com_k2_todo_title": {
                         displayName: "Title",
                         type: "string"
                     },
-                    "com.k2.todo.completed": {
+                    "com_k2_todo_completed": {
                         displayName: "Completed",
                         type: "boolean"
                     }
                 },
                 methods: {
-                    "com.k2.todo.get": {
+                    "com_k2_todo_get": {
                         displayName: "Get TODO",
                         type: "read",
-                        inputs: [ "com.k2.todo.id" ],
-                        outputs: [ "com.k2.todo.id", "com.k2.todo.userId", "com.k2.todo.title", "com.k2.todo.completed" ]
+                        inputs: [ "com_k2_todo_id" ],
+                        outputs: [ "com_k2_todo_id", "com_k2_todo_userId", "com_k2_todo_title", "com_k2_todo_completed" ]
                     },
-                    "com.k2.todo.get.params": {
+                    "com_k2_todo_get_params": {
                         displayName: "Get TODO",
                         type: "read",
                         parameters: {
-                            "com.k2.todo.pid" : { displayName: "param1", description: "Description Of Param 1", type: "number"} 
+                            "com_k2_todo_pid" : { displayName: "param1", description: "Description Of Param 1", type: "number"} 
                         },
-                        requiredParameters: [ "com.k2.todo.pid" ],
-                        outputs: [ "com.k2.todo.id" ]
+                        requiredParameters: [ "com_k2_todo_pid" ],
+                        outputs: [ "com_k2_todo_id" ]
                     }
                 }
             }
@@ -67,7 +67,7 @@ test('execute fails with the wrong parameters', async t => {
     
     t.deepEqual(error.message, 'The object test1 is not supported.');
 
-    error = await t.throwsAsync(Promise.resolve<void>(onexecute('com.k2.todo', 'test2', {}, {})));
+    error = await t.throwsAsync(Promise.resolve<void>(onexecute('com_k2_todo', 'test2', {}, {})));
     
     t.deepEqual(error.message, 'The method test2 is not supported.');
 
@@ -83,12 +83,12 @@ test('execute passes with method params', async t => {
     mock('postResult', pr);
 
     await Promise.resolve<void>(onexecute(
-        'com.k2.todo', 'com.k2.todo.get.params', {
-            "com.k2.todo.pid": 456
+        'com_k2_todo', 'com_k2_todo_get_params', {
+            "com_k2_todo_pid": 456
         }, {}, {}));
 
     t.deepEqual(result, {
-        "com.k2.todo.id": 456
+        "com_k2_todo_id": 456
     });
 
     t.pass();
@@ -144,8 +144,8 @@ test('execute passes', async t => {
     mock('postResult', pr);
 
     await Promise.resolve<void>(onexecute(
-        'com.k2.todo', 'com.k2.todo.get', {}, {
-            "com.k2.todo.id": 123
+        'com_k2_todo', 'com_k2_todo_get', {}, {
+            "com_k2_todo_id": 123
         }, {}));
 
     t.deepEqual(xhr, {
@@ -159,10 +159,10 @@ test('execute passes', async t => {
     });
 
     t.deepEqual(result, {
-        "com.k2.todo.id": 123,
-        "com.k2.todo.userId": 51,
-        "com.k2.todo.title": "Groceries",
-        "com.k2.todo.completed": false
+        "com_k2_todo_id": 123,
+        "com_k2_todo_userId": 51,
+        "com_k2_todo_title": "Groceries",
+        "com_k2_todo_completed": false
     });
 
     t.pass();

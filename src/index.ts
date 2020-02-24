@@ -9,42 +9,42 @@ metadata = {
 ondescribe = async function(): Promise<void> {
     postSchema({
         objects: {
-            "com.k2.todo": {
+            "com_k2_todo": {
                 displayName: "TODO",
                 description: "Manages a TODO list",
                 properties: {
-                    "com.k2.todo.id": {
+                    "com_k2_todo_id": {
                         displayName: "ID",
                         type: "number"
                     },
-                    "com.k2.todo.userId": {
+                    "com_k2_todo_userId": {
                         displayName: "User ID",
                         type: "number"
                     },
-                    "com.k2.todo.title": {
+                    "com_k2_todo_title": {
                         displayName: "Title",
                         type: "string"
                     },
-                    "com.k2.todo.completed": {
+                    "com_k2_todo_completed": {
                         displayName: "Completed",
                         type: "boolean"
                     }
                 },
                 methods: {
-                    "com.k2.todo.get": {
+                    "com_k2_todo_get": {
                         displayName: "Get TODO",
                         type: "read",
-                        inputs: [ "com.k2.todo.id" ],
-                        outputs: [ "com.k2.todo.id", "com.k2.todo.userId", "com.k2.todo.title", "com.k2.todo.completed" ]
+                        inputs: [ "com_k2_todo_id" ],
+                        outputs: [ "com_k2_todo_id", "com_k2_todo_userId", "com_k2_todo_title", "com_k2_todo_completed" ]
                     },
-                    "com.k2.todo.get.params": {
+                    "com_k2_todo_get_params": {
                         displayName: "Get TODO",
                         type: "read",
                         parameters: {
-                            "com.k2.todo.pid" : { displayName: "param1", description: "Description Of Param 1", type: "number"} 
+                            "com_k2_todo_pid" : { displayName: "param1", description: "Description Of Param 1", type: "number"} 
                         },
-                        requiredParameters: [ "com.k2.todo.pid" ],
-                        outputs: [ "com.k2.todo.id" ]
+                        requiredParameters: [ "com_k2_todo_pid" ],
+                        outputs: [ "com_k2_todo_id" ]
                     }
                 }
             }
@@ -55,7 +55,7 @@ ondescribe = async function(): Promise<void> {
 onexecute = async function(objectName, methodName, parameters, properties): Promise<void> {
     switch (objectName)
     {
-        case "com.k2.todo": await onexecuteTodo(methodName, properties, parameters); break;
+        case "com_k2_todo": await onexecuteTodo(methodName, properties, parameters); break;
         default: throw new Error("The object " + objectName + " is not supported.");
     }
 }
@@ -63,8 +63,8 @@ onexecute = async function(objectName, methodName, parameters, properties): Prom
 async function onexecuteTodo(methodName: string, properties: SingleRecord, parameters: SingleRecord): Promise<void> {
     switch (methodName)
     {
-        case "com.k2.todo.get": await onexecuteTodoGet(properties); break;
-        case "com.k2.todo.get.params": await onexecuteTodoGetWithParams(parameters); break;
+        case "com_k2_todo_get": await onexecuteTodoGet(properties); break;
+        case "com_k2_todo_get_params": await onexecuteTodoGetWithParams(parameters); break;
         default: throw new Error("The method " + methodName + " is not supported.");
     }
 }
@@ -80,10 +80,10 @@ function onexecuteTodoGet(properties: SingleRecord): Promise<void> {
 
                 var obj = JSON.parse(xhr.responseText);
                 postResult({
-                    "com.k2.todo.id": obj.id,
-                    "com.k2.todo.userId": obj.userId,
-                    "com.k2.todo.title": obj.title,
-                    "com.k2.todo.completed": obj.completed
+                    "com_k2_todo_id": obj.id,
+                    "com_k2_todo_userId": obj.userId,
+                    "com_k2_todo_title": obj.title,
+                    "com_k2_todo_completed": obj.completed
                 });
                 resolve();
             } catch (e) {
@@ -91,7 +91,7 @@ function onexecuteTodoGet(properties: SingleRecord): Promise<void> {
             }
         };
 
-        xhr.open("GET", 'https://jsonplaceholder.typicode.com/todos/' + properties["com.k2.todo.id"]);
+        xhr.open("GET", 'https://jsonplaceholder.typicode.com/todos/' + properties["com_k2_todo_id"]);
         xhr.setRequestHeader('test', 'test value');
         xhr.send();
     });
@@ -102,7 +102,7 @@ function onexecuteTodoGetWithParams(parameters: SingleRecord): Promise<void> {
     {
         try {
             postResult({
-                "com.k2.todo.id": parameters["com.k2.todo.pid"]
+                "com_k2_todo_id": parameters["com_k2_todo_pid"]
             });
             resolve();
         } catch (e) {
