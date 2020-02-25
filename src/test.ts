@@ -17,42 +17,42 @@ test('describe returns the hardcoded instance', async t => {
     
     t.deepEqual(schema, {
         objects: {
-            "com_k2_todo": {
+            "todo": {
                 displayName: "TODO",
                 description: "Manages a TODO list",
                 properties: {
-                    "com_k2_todo_id": {
+                    "id": {
                         displayName: "ID",
                         type: "number"
                     },
-                    "com_k2_todo_userId": {
+                    "userId": {
                         displayName: "User ID",
                         type: "number"
                     },
-                    "com_k2_todo_title": {
+                    "title": {
                         displayName: "Title",
                         type: "string"
                     },
-                    "com_k2_todo_completed": {
+                    "completed": {
                         displayName: "Completed",
                         type: "boolean"
                     }
                 },
                 methods: {
-                    "com_k2_todo_get": {
+                    "get": {
                         displayName: "Get TODO",
                         type: "read",
-                        inputs: [ "com_k2_todo_id" ],
-                        outputs: [ "com_k2_todo_id", "com_k2_todo_userId", "com_k2_todo_title", "com_k2_todo_completed" ]
+                        inputs: [ "id" ],
+                        outputs: [ "id", "userId", "title", "completed" ]
                     },
-                    "com_k2_todo_get_params": {
+                    "getParams": {
                         displayName: "Get TODO",
                         type: "read",
                         parameters: {
-                            "com_k2_todo_pid" : { displayName: "param1", description: "Description Of Param 1", type: "number"} 
+                            "pid" : { displayName: "param1", description: "Description Of Param 1", type: "number"} 
                         },
-                        requiredParameters: [ "com_k2_todo_pid" ],
-                        outputs: [ "com_k2_todo_id" ]
+                        requiredParameters: [ "pid" ],
+                        outputs: [ "id" ]
                     }
                 }
             }
@@ -67,7 +67,7 @@ test('execute fails with the wrong parameters', async t => {
     
     t.deepEqual(error.message, 'The object test1 is not supported.');
 
-    error = await t.throwsAsync(Promise.resolve<void>(onexecute('com_k2_todo', 'test2', {}, {})));
+    error = await t.throwsAsync(Promise.resolve<void>(onexecute('todo', 'test2', {}, {})));
     
     t.deepEqual(error.message, 'The method test2 is not supported.');
 
@@ -83,12 +83,12 @@ test('execute passes with method params', async t => {
     mock('postResult', pr);
 
     await Promise.resolve<void>(onexecute(
-        'com_k2_todo', 'com_k2_todo_get_params', {
-            "com_k2_todo_pid": 456
+        'todo', 'getParams', {
+            "pid": 456
         }, {}, {}));
 
     t.deepEqual(result, {
-        "com_k2_todo_id": 456
+        "id": 456
     });
 
     t.pass();
@@ -144,8 +144,8 @@ test('execute passes', async t => {
     mock('postResult', pr);
 
     await Promise.resolve<void>(onexecute(
-        'com_k2_todo', 'com_k2_todo_get', {}, {
-            "com_k2_todo_id": 123
+        'todo', 'get', {}, {
+            "id": 123
         }, {}));
 
     t.deepEqual(xhr, {
@@ -159,10 +159,10 @@ test('execute passes', async t => {
     });
 
     t.deepEqual(result, {
-        "com_k2_todo_id": 123,
-        "com_k2_todo_userId": 51,
-        "com_k2_todo_title": "Groceries",
-        "com_k2_todo_completed": false
+        "id": 123,
+        "userId": 51,
+        "title": "Groceries",
+        "completed": false
     });
 
     t.pass();
