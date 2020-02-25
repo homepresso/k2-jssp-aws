@@ -9,33 +9,42 @@ metadata = {
 ondescribe = async function(): Promise<void> {
     postSchema({
         objects: {
-            "com.k2.todo": {
+            "todo": {
                 displayName: "TODO",
                 description: "Manages a TODO list",
                 properties: {
-                    "com.k2.todo.id": {
+                    "id": {
                         displayName: "ID",
                         type: "number"
                     },
-                    "com.k2.todo.userId": {
+                    "userId": {
                         displayName: "User ID",
                         type: "number"
                     },
-                    "com.k2.todo.title": {
+                    "title": {
                         displayName: "Title",
                         type: "string"
                     },
-                    "com.k2.todo.completed": {
+                    "completed": {
                         displayName: "Completed",
                         type: "boolean"
                     }
                 },
                 methods: {
-                    "com.k2.todo.get": {
+                    "get": {
                         displayName: "Get TODO",
                         type: "read",
-                        inputs: [ "com.k2.todo.id" ],
-                        outputs: [ "com.k2.todo.id", "com.k2.todo.userId", "com.k2.todo.title", "com.k2.todo.completed" ]
+                        inputs: [ "id" ],
+                        outputs: [ "id", "userId", "title", "completed" ]
+                    },
+                    "getParams": {
+                        displayName: "Get TODO",
+                        type: "read",
+                        parameters: {
+                            "pid" : { displayName: "param1", description: "Description Of Param 1", type: "number"} 
+                        },
+                        requiredParameters: [ "pid" ],
+                        outputs: [ "id" ]
                     }
                 }
             }
@@ -43,18 +52,19 @@ ondescribe = async function(): Promise<void> {
     });
 }
 
-onexecute = async function(objectName, methodName, _parameters, properties): Promise<void> {
+onexecute = async function(objectName, methodName, parameters, properties): Promise<void> {
     switch (objectName)
     {
-        case "com.k2.todo": await onexecuteTodo(methodName, properties); break;
+        case "todo": await onexecuteTodo(methodName, properties, parameters); break;
         default: throw new Error("The object " + objectName + " is not supported.");
     }
 }
 
-async function onexecuteTodo(methodName: string, properties: SingleRecord): Promise<void> {
+async function onexecuteTodo(methodName: string, properties: SingleRecord, parameters: SingleRecord): Promise<void> {
     switch (methodName)
     {
-        case "com.k2.todo.get": await onexecuteTodoGet(properties); break;
+        case "get": await onexecuteTodoGet(properties); break;
+        case "getParams": await onexecuteTodoGetWithParams(parameters); break;
         default: throw new Error("The method " + methodName + " is not supported.");
     }
 }
@@ -70,10 +80,10 @@ function onexecuteTodoGet(properties: SingleRecord): Promise<void> {
 
                 var obj = JSON.parse(xhr.responseText);
                 postResult({
-                    "com.k2.todo.id": obj.id,
-                    "com.k2.todo.userId": obj.userId,
-                    "com.k2.todo.title": obj.title,
-                    "com.k2.todo.completed": obj.completed
+                    "id": obj.id,
+                    "userId": obj.userId,
+                    "title": obj.title,
+                    "completed": obj.completed
                 });
                 resolve();
             } catch (e) {
@@ -81,8 +91,23 @@ function onexecuteTodoGet(properties: SingleRecord): Promise<void> {
             }
         };
 
-        xhr.open("GET", 'https://jsonplaceholder.typicode.com/todos/' + properties["com.k2.todo.id"]);
+        xhr.open("GET", 'https://jsonplaceholder.typicode.com/todos/' + properties["id"]);
         xhr.setRequestHeader('test', 'test value');
         xhr.send();
+    });
+}
+
+function onexecuteTodoGetWithParams(parameters: SingleRecord): Promise<void> {
+    return new Promise<void>((resolve, reject) =>
+    {
+        try {
+            postResult({
+                "id": parameters["pid"]
+            });
+            resolve();
+        } catch (e) {
+            reject(e);
+        }
+        
     });
 }
