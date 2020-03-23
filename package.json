@@ -1,6 +1,6 @@
 {
   "name": "example-broker",
-  "version": "1.0.0",
+  "version": "1.0.2-preview-1",
   "description": "Example K2 Broker",
   "homepage": "https://www.k2.com",
   "license": "MIT",
