@@ -6,7 +6,7 @@ metadata = {
     description: "An example broker that accesses JSONPlaceholder."
 };
 
-ondescribe = async function(): Promise<void> {
+ondescribe = async function({configuration}): Promise<void> {
     postSchema({
         objects: {
             "todo": {
@@ -52,7 +52,7 @@ ondescribe = async function(): Promise<void> {
     });
 }
 
-onexecute = async function(objectName, methodName, parameters, properties): Promise<void> {
+onexecute = async function({objectName, methodName, parameters, properties, configuration, schema}): Promise<void> {
     switch (objectName)
     {
         case "todo": await onexecuteTodo(methodName, properties, parameters); break;
