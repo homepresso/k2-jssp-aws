@@ -90,8 +90,9 @@ function onexecuteTodoGet(properties: SingleRecord): Promise<void> {
                 reject(e);
             }
         };
-
-        xhr.open("GET", 'https://jsonplaceholder.typicode.com/todos/' + properties["id"]);
+        
+        if(typeof properties["id"] !== "number") throw new Error("properties[\"id\"] is not of type number");
+        xhr.open("GET", 'https://jsonplaceholder.typicode.com/todos/' + encodeURIComponent(properties["id"]));
         xhr.setRequestHeader('test', 'test value');
         xhr.send();
     });
