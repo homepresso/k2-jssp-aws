@@ -22,7 +22,7 @@ function buildConfig(inputFile) {
   const babelHelpers = "runtime";
 
   const plugins = [
-    resolve(),
+    resolve({ extensions }),
     commonjs(),
     replace({ BUILD_ENV, "process.env.NODE_ENV": BUILD_ENV }),
     json(),
@@ -51,7 +51,7 @@ function buildTestConfig(inputFile) {
   const babelHelpers = "runtime";
 
   const plugins = [
-    resolve(),
+    resolve({ extensions }),
     commonjs(),
     replace({ BUILD_ENV, "process.env.NODE_ENV": BUILD_ENV }),
     json(),
