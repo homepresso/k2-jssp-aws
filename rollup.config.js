@@ -65,7 +65,6 @@ function buildTestConfig(inputFile) {
   return {
     input: inputFile,
     external: ["ava"],
-    external: () => true,
     output: {
       file: "dist/" + outputFile,
       format: "cjs",
