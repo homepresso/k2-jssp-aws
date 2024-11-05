@@ -10,6 +10,7 @@
     "email": "oss@k2.com",
     "url": "https://www.k2.com"
   },
+  "type": "module",
   "files": [
     "dist/index.js"
   ],
@@ -18,23 +19,10 @@
     "k2-broker"
   ],
   "scripts": {
-    "build:dev": "npm run build:bundle-dev",
-    "build:bundle-dev": "node node_modules/rollup/dist/bin/rollup -c --environment NODE_ENV:development",
-    "build:bundle-prod": "node node_modules/rollup/dist/bin/rollup -c --environment NODE_ENV:production",
-    "watch": "node node_modules/rollup/dist/bin/rollup -c --watch --environment NODE_ENV:development",
-    "run-tests": "node node_modules/nyc/bin/nyc node_modules/ava/cli",
+    "run-tests": "vitest --coverage --run",
     "test": "npm run build && npm run run-tests",
-    "test:dev": "npm run build:dev && npm run run-tests",
-    "dev": "vite",
-    "build": "tsc && vite build",
-    "preview": "vite preview"
-  },
-  "ava": {
-    "typescript": {
-      "rewritePaths": {
-        "src/": "dist/"
-      }
-    }
+    "build": "vite build && tsc",
+    "update-deps": "pnpm i"
   },
   "nyc": {
     "reporter": [
@@ -47,23 +35,11 @@
     ]
   },
   "devDependencies": {
-    "@ava/typescript": "^5.0.0",
-    "@babel/core": "^7.26.0",
-    "@babel/plugin-transform-runtime": "^7.25.9",
-    "@babel/preset-env": "^7.26.0",
-    "@babel/preset-typescript": "^7.26.0",
-    "@babel/register": "^7.25.9",
-    "@babel/runtime": "^7.26.0",
     "@k2oss/k2-broker-core": "1.0.0",
-    "@rollup/plugin-commonjs": "^28.0.1",
-    "@rollup/plugin-json": "^6.1.0",
-    "@rollup/plugin-node-resolve": "^15.3.0",
-    "@rollup/plugin-replace": "^6.0.1",
-    "@rollup/plugin-babel": "^6.0.4",
-    "ava": "^6.2.0",
-    "core-js": "^3.39.0",
-    "nyc": "^17.1.0",
+    "@vitest/coverage-istanbul": "^2.1.4",
+    "@types/glob": "^8.1.0",
     "typescript": "^5.6.3",
-    "vite": "^5.4.10"
+    "vite": "^5.4.10",
+    "vitest": "^2.1.4"
   }
 }
