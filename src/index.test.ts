@@ -67,7 +67,7 @@ test('describe returns the hardcoded instance', async (t) => {
     });
 })
 
-test("fails with the wrong parameters", async (t) => {
+test("execute fails with the wrong parameters", async (t) => {
     await t.expect(
         onexecute({
             objectName: "test1",
@@ -115,7 +115,7 @@ test("execute passes with method params", async (t) => {
     t.expect(result).toStrictEqual({id:456})
 });
 
-test("execute passes with method params", async (t) => {
+test("execute passes", async (t) => {
     let xhr: { [key: string]: any } = null;
     class XHR {
         public onreadystatechange: () => void;
