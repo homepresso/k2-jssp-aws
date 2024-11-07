@@ -1,50 +1,41 @@
 import {defineConfig} from 'vite';
-import path from 'path';
+import path, {resolve} from 'path';
 import glob from 'glob';
 
-export default defineConfig({
+/** @type {import('vite').UserConfig} */
+export default defineConfig(({ command, mode }) => ({
+    plugins: [],
     build: {
+        sourcemap: true,
+        emptyOutDir: true,
+        outDir: "dist",
         lib: {
             // Define multiple entry points using glob, finds all .ts files recursively, then uses the name to create entrypoints
             entry: glob
-                .sync('./src/**/*.ts')
+                .sync("./src/**/*.ts")
                 .reduce((entries, file) => {
-                        const entryName = path
-                            .relative('./src', file)
-                            .replace(/\.ts$/, '');
-                        entries[entryName] = path.resolve(__dirname, file);
-                        return entries;
-                    },
-                    {} as Record<string, string>),
+                    const entryName = path
+                        .relative('./src', file)
+                        .replace(/\.ts$/, '');
+                    entries[entryName] = path.resolve(__dirname, file);
+                    return entries;
+                }, {}),
             formats: ['es'],
         },
         rollupOptions: {
-            // Ensure that each entry point is treated separately
             output: {
-                // Preserve the directory structure in the output
-                entryFileNames: '[name].js',
-                chunkFileNames: 'chunks/[name]-[hash].js',
-                assetFileNames: 'assets/[name]-[hash][extname]',
+                entryFileNames: `[name].min.js`,
+                chunkFileNames: `[name].js`,
+                assetFileNames: `[name].[ext]`,
                 dir: 'dist', // Output directory
                 format: 'es',
             },
-            // Externalize dependencies if needed
-            external: [], // Add external dependencies here
-        },
-        outDir: 'dist', // Output directory
-        emptyOutDir: true,
-        sourcemap: true, // Optional: generate source maps
-    },
-    resolve: {
-        alias: {
-            '@': path.resolve(__dirname, './src'),
         },
     },
-    plugins: [
-        // Add necessary Vite plugins here
-    ],
+    minify: 'esbuild',
     esbuild: {
-        // Optionally, configure esbuild options if needed
-        // For example, to handle JSX or other transformations
-    },
-});
+        minifyWhitespace: true,
+        minifyIdentifiers: true,
+        minifySyntax: true,
+    }
+}));
