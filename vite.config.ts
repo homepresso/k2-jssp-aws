@@ -1,5 +1,5 @@
 import {defineConfig} from 'vite';
-import path, {resolve} from 'path';
+import path from 'path';
 import glob from 'glob';
 
 /** @type {import('vite').UserConfig} */

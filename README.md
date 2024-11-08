@@ -7,7 +7,7 @@ This is demonstrates best-practices for developing a K2 Broker using TypeScript.
 - Full object model intellisense for making development easier
 - Sample broker code that accesses jsonplaceholder.
 - Sample unit tests with mocks and code coverage.
-- RollupJS configuration for TypeScript.
+- Vite configuration for TypeScript.
 
 ## Getting Started
 
@@ -276,7 +276,7 @@ There are some key differences between `ava` and `vitest`:
 
 ---
 
-### License
+## License
 
 MIT, found in the [LICENSE](./LICENSE) file.
 
