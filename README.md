@@ -11,7 +11,7 @@ This is demonstrates best-practices for developing a K2 Broker using TypeScript.
 
 ## Getting Started
 
-This template requires [Node.js](https://nodejs.org/) v12.14.1+ to run.
+This template requires [Node.js](https://nodejs.org/) v22.5.1+ to run.
 
 Install the dependencies and devDependencies:
 

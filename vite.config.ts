@@ -1,6 +1,6 @@
 import {defineConfig} from 'vite';
 import path from 'path';
-import glob from 'glob';
+import {glob} from 'glob';
 
 /** @type {import('vite').UserConfig} */
 export default defineConfig(({ command, mode }) => ({
