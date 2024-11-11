@@ -1,8 +1,39 @@
-# K2 TypeScript Broker Template
+K2 TypeScript Broker Template
+===
 
-This is demonstrates best-practices for developing a K2 Broker using TypeScript.
+This template demonstrates best-practices for developing a K2 Broker using TypeScript.
 
-# Features
+<!-- TOC -->
+* [K2 TypeScript Broker Template](#k2-typescript-broker-template)
+  * [Features](#features)
+  * [Getting Started](#getting-started)
+  * [Running Unit Tests](#running-unit-tests)
+  * [Building your bundled JS](#building-your-bundled-js)
+  * [Creating a service type](#creating-a-service-type)
+  * [License](#license)
+  * [Migration from Ava to Vitest](#migration-from-ava-to-vitest)
+    * [1. Installation](#1-installation)
+    * [2. Configuring Vitest](#2-configuring-vitest)
+    * [3. Syntax Differences](#3-syntax-differences)
+      * [Basic Test Structure](#basic-test-structure)
+        * [Ava](#ava)
+        * [Vitest](#vitest)
+      * [Assertions](#assertions)
+      * [Test Hooks](#test-hooks)
+      * [Example:](#example)
+        * [Ava](#ava-1)
+        * [Vitest](#vitest-1)
+    * [4. Async Tests](#4-async-tests)
+        * [Ava](#ava-2)
+        * [Vitest](#vitest-2)
+    * [5. Snapshot Testing](#5-snapshot-testing)
+        * [Vitest](#vitest-3)
+    * [6. Coverage](#6-coverage)
+    * [7. Running Tests](#7-running-tests)
+    * [8. Notes](#8-notes)
+<!-- TOC -->
+
+## Features
 
 - Full object model intellisense for making development easier
 - Sample broker code that accesses jsonplaceholder.
@@ -57,6 +88,12 @@ Once you have a bundled .js file, upload it to your repository (anonymously
 accessible) and register the service type using the system SmartObject located
 at System > Management > SmartObjects > SmartObjects > JavaScript Service
 Provider and run the Create From URL method.
+
+## License
+
+MIT, found in the [LICENSE](./LICENSE) file.
+
+[www.k2.com](https://www.k2.com)
 
 ## Migration from Ava to Vitest
 
@@ -118,7 +155,7 @@ export default defineConfig({
 Ava uses `test` as the default import, while Vitest lets you import directly from `vitest` with a similar API. Here’s a
 comparison:
 
-##### Ava:
+##### Ava
 
 ```javascript
 import test from 'ava';
@@ -128,7 +165,7 @@ test('basic test', t => {
 });
 ```
 
-##### Vitest:
+##### Vitest
 
 ```javascript
 import {test, expect} from 'vitest';
@@ -164,7 +201,7 @@ Both Ava and Vitest have setup and teardown hooks, but with slightly different n
 
 #### Example:
 
-##### Ava:
+##### Ava
 
 ```javascript
 test.before(() => {
@@ -176,7 +213,7 @@ test.afterEach(() => {
 });
 ```
 
-##### Vitest:
+##### Vitest
 
 ```javascript
 import {beforeAll, afterEach} from 'vitest';
@@ -193,7 +230,7 @@ afterEach(() => {
 
 Ava allows async tests with `async` functions, and Vitest works the same way but uses a simpler `expect` pattern.
 
-##### Ava:
+##### Ava
 
 ```javascript
 test('async test', async t => {
@@ -202,7 +239,7 @@ test('async test', async t => {
 });
 ```
 
-##### Vitest:
+##### Vitest
 
 ```javascript
 test('async test', async () => {
@@ -216,7 +253,7 @@ test('async test', async () => {
 Vitest has built-in support for snapshot testing, similar to Jest. Ava doesn’t have built-in support for snapshots,
 so if you were using a separate library for it, you can replace it with Vitest’s `expect().toMatchSnapshot()`.
 
-##### Vitest:
+##### Vitest
 
 ```javascript
 test('snapshot test', () => {
@@ -275,9 +312,3 @@ There are some key differences between `ava` and `vitest`:
   keep to the defaults for familiarity.
 
 ---
-
-## License
-
-MIT, found in the [LICENSE](./LICENSE) file.
-
-[www.k2.com](https://www.k2.com)
