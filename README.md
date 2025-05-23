@@ -77,4 +77,4 @@ MIT, found in the [LICENSE](./LICENSE) file.
 [www.k2.com](https://www.k2.com)
 
 ## Migration from Ava to Vitest
-If you used a previous version of this template and want to migrate to Vitest, please review the [Migration.md](./Migration.md) guide.
+If you used a previous version of this template and want to migrate to Vitest, please review the [Migration.md](./Migration.md) guide."# k2-jssp-aws" 
