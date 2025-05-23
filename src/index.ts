@@ -1,79 +1,4 @@
-// Base64 encoding function
-function base64Encode(str: string): string {
-    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
-    let result = '';
-    let i = 0;
-
-    while (i < str.length) {
-        const a = str.charCodeAt(i++);
-        const b = i < str.length ? str.charCodeAt(i++) : 0;
-        const c = i < str.length ? str.charCodeAt(i++) : 0;
-
-        const bitmap = (a << 16) | (b << 8) | c;
-
-        result += chars.charAt((bitmap >> 18) & 63);
-        result += chars.charAt((bitmap >> 12) & 63);
-        result += i - 2 < str.length ? chars.charAt((bitmap >> 6) & 63) : '=';
-        result += i - 1 < str.length ? chars.charAt(bitmap & 63) : '=';
-    }
-
-    return result;
-}
-
-// Base64 decoding function
-function base64Decode(str: string): string {
-    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
-    let result = '';
-    let i = 0;
-
-    str = str.replace(/[^A-Za-z0-9\+\/]/g, '');
-
-    while (i < str.length) {
-        const encoded1 = chars.indexOf(str.charAt(i++));
-        const encoded2 = chars.indexOf(str.charAt(i++));
-        const encoded3 = chars.indexOf(str.charAt(i++));
-        const encoded4 = chars.indexOf(str.charAt(i++));
-
-        const bitmap = (encoded1 << 18) | (encoded2 << 12) | (encoded3 << 6) | encoded4;
-
-        result += String.fromCharCode((bitmap >> 16) & 255);
-        if (encoded3 !== 64) result += String.fromCharCode((bitmap >> 8) & 255);
-        if (encoded4 !== 64) result += String.fromCharCode(bitmap & 255);
-    }
-
-    return result;
-}// Helper function to find bucket region
-async function findBucketRegion(bucketName: string, configuration: SingleRecord): Promise<string> {
-    const regions = ['us-east-1', 'us-west-1', 'us-west-2', 'eu-west-1', 'eu-central-1', 'ap-southeast-1', 'ap-northeast-1'];
-    const configuredRegion = configuration.AWSRegion as string;
-
-    // Try configured region first
-    for (const region of [configuredRegion, ...regions.filter(r => r !== configuredRegion)]) {
-        try {
-            const host = `${bucketName}.s3.${region}.amazonaws.com`;
-            const url = `https://${host}/`;
-
-            const headers = createAWSSignatureV4(
-                configuration,
-                'HEAD',
-                '/',
-                '',
-                { 'Host': host },
-                '',
-                region,
-                's3'
-            );
-
-            await makeAwsRequest('HEAD', url, headers, null, configuration);
-            return region; // If successful, this is the correct region
-        } catch (error: any) {
-            // Continue to next region if this one fails
-            continue;
-        }
-    }
-
-    throw new Error(`Could not find bucket ${bucketName} in any region`);
-} import "@k2oss/k2-broker-core";
+import "@k2oss/k2-broker-core";
 
 // Service metadata
 metadata = {
@@ -256,11 +181,6 @@ ondescribe = async function ({ configuration }): Promise<void> {
                         description: "Uploads a file or content to AWS S3",
                         inputs: ["BucketName", "Key"],
                         parameters: {
-                            FilePath: {
-                                displayName: "File Path",
-                                description: "Local file path to upload",
-                                type: "string"
-                            },
                             FileContent: {
                                 displayName: "File Content",
                                 description: "Direct content to upload",
@@ -270,6 +190,11 @@ ondescribe = async function ({ configuration }): Promise<void> {
                                 displayName: "Content Type",
                                 description: "MIME type of the content",
                                 type: "string"
+                            },
+                            IsBase64: {
+                                displayName: "Is Base64",
+                                description: "Whether the content is base64 encoded",
+                                type: "boolean"
                             }
                         },
                         outputs: ["Key", "ETag", "Size", "Status"]
@@ -280,10 +205,10 @@ ondescribe = async function ({ configuration }): Promise<void> {
                         description: "Downloads an object from S3",
                         inputs: ["BucketName", "Key"],
                         parameters: {
-                            FilePath: {
-                                displayName: "File Path",
-                                description: "Local file path to save downloaded file",
-                                type: "string"
+                            ReturnAsBase64: {
+                                displayName: "Return as Base64",
+                                description: "Return content as base64 encoded",
+                                type: "boolean"
                             }
                         },
                         outputs: ["Key", "ContentType", "Size", "FileContent", "Status"]
@@ -401,6 +326,42 @@ function sha256(ascii: string): string {
     return result;
 }
 
+// SHA-256 for UTF-8 content
+function sha256UTF8(message: string): string {
+    // Convert string to UTF-8 bytes
+    const bytes: number[] = [];
+    for (let i = 0; i < message.length; i++) {
+        const c = message.charCodeAt(i);
+        if (c < 0x80) {
+            bytes.push(c);
+        } else if (c < 0x800) {
+            bytes.push(0xc0 | (c >> 6));
+            bytes.push(0x80 | (c & 0x3f));
+        } else if (c < 0xd800 || c >= 0xe000) {
+            bytes.push(0xe0 | (c >> 12));
+            bytes.push(0x80 | ((c >> 6) & 0x3f));
+            bytes.push(0x80 | (c & 0x3f));
+        } else {
+            // Surrogate pair
+            i++;
+            const c2 = message.charCodeAt(i);
+            const codePoint = 0x10000 + ((c & 0x3ff) << 10) + (c2 & 0x3ff);
+            bytes.push(0xf0 | (codePoint >> 18));
+            bytes.push(0x80 | ((codePoint >> 12) & 0x3f));
+            bytes.push(0x80 | ((codePoint >> 6) & 0x3f));
+            bytes.push(0x80 | (codePoint & 0x3f));
+        }
+    }
+
+    // Convert bytes back to string for sha256 function
+    let binaryString = '';
+    for (let i = 0; i < bytes.length; i++) {
+        binaryString += String.fromCharCode(bytes[i]);
+    }
+
+    return sha256(binaryString);
+}
+
 // HMAC-SHA256 implementation
 function hmacSHA256(key: string, message: string): string {
     const blockSize = 64;
@@ -446,6 +407,15 @@ function toHex(str: string): string {
         hex += ('0' + code.toString(16)).slice(-2);
     }
     return hex;
+}
+
+// Convert hex string to binary string
+function hexToString(hex: string): string {
+    let str = '';
+    for (let i = 0; i < hex.length; i += 2) {
+        str += String.fromCharCode(parseInt(hex.substr(i, 2), 16));
+    }
+    return str;
 }
 
 // AWS Signature V4 implementation
@@ -546,16 +516,105 @@ function createAWSSignatureV4(
     return resultHeaders;
 }
 
-// Convert hex string to binary string
-function hexToString(hex: string): string {
-    let str = '';
-    for (let i = 0; i < hex.length; i += 2) {
-        str += String.fromCharCode(parseInt(hex.substr(i, 2), 16));
+// Special version for file uploads
+function createAWSSignatureV4ForUpload(
+    config: SingleRecord,
+    method: string,
+    path: string,
+    queryString: string,
+    headers: any,
+    payload: string,
+    region: string,
+    service: string
+): any {
+    const accessKey = config.AWSAccessKey as string;
+    const secretKey = config.AWSSecretKey as string;
+    const awsRegion = region || (config.AWSRegion as string);
+
+    // Create timestamp
+    const now = new Date();
+    const dateStamp = now.toISOString().split('T')[0].replace(/-/g, '');
+    const amzDate = now.toISOString().replace(/[:\-]|\.\d{3}/g, '');
+
+    // Calculate payload hash - use UTF-8 aware version
+    const payloadHash = sha256UTF8(payload || '');
+
+    // Create canonical headers
+    const hostHeader = headers['Host'] || `s3.${awsRegion}.amazonaws.com`;
+    const canonicalHeaders: any = {
+        'host': hostHeader,
+        'x-amz-content-sha256': payloadHash,
+        'x-amz-date': amzDate
+    };
+
+    // Add additional headers if present
+    if (headers['Content-Type']) {
+        canonicalHeaders['content-type'] = headers['Content-Type'];
     }
-    return str;
+    if (headers['Content-Length']) {
+        canonicalHeaders['content-length'] = headers['Content-Length'];
+    }
+
+    // Sort headers
+    const sortedHeaders = Object.keys(canonicalHeaders).sort();
+    const signedHeaders = sortedHeaders.join(';');
+
+    // Create canonical request
+    let canonicalRequest = method + '\n';
+    canonicalRequest += path + '\n';
+    canonicalRequest += (queryString || '') + '\n';
+
+    // Add headers to canonical request
+    for (const header of sortedHeaders) {
+        canonicalRequest += header + ':' + canonicalHeaders[header] + '\n';
+    }
+
+    canonicalRequest += '\n';
+    canonicalRequest += signedHeaders + '\n';
+    canonicalRequest += payloadHash;
+
+    // Create string to sign
+    const algorithm = 'AWS4-HMAC-SHA256';
+    const credentialScope = `${dateStamp}/${awsRegion}/${service}/aws4_request`;
+    const canonicalRequestHash = sha256(canonicalRequest);
+
+    const stringToSign = algorithm + '\n' +
+        amzDate + '\n' +
+        credentialScope + '\n' +
+        canonicalRequestHash;
+
+    // Calculate signature
+    const kDate = hmacSHA256('AWS4' + secretKey, dateStamp);
+    const kRegion = hmacSHA256(hexToString(kDate), awsRegion);
+    const kService = hmacSHA256(hexToString(kRegion), service);
+    const kSigning = hmacSHA256(hexToString(kService), 'aws4_request');
+    const signature = hmacSHA256(hexToString(kSigning), stringToSign);
+
+    // Create authorization header
+    const authorizationHeader = `${algorithm} ` +
+        `Credential=${accessKey}/${credentialScope}, ` +
+        `SignedHeaders=${signedHeaders}, ` +
+        `Signature=${signature}`;
+
+    const resultHeaders: any = {
+        'Authorization': authorizationHeader,
+        'X-Amz-Date': amzDate,
+        'X-Amz-Content-Sha256': payloadHash,
+        'Host': hostHeader
+    };
+
+    // Add Content-Type and Content-Length if they were provided
+    if (headers['Content-Type']) {
+        resultHeaders['Content-Type'] = headers['Content-Type'];
+    }
+    if (headers['Content-Length']) {
+        resultHeaders['Content-Length'] = headers['Content-Length'];
+    }
+
+    return resultHeaders;
 }
 
-// Calculate string byte length without using Blob
+// Calculate string byte length
 function getStringByteLength(str: string): number {
     let byteLength = 0;
     for (let i = 0; i < str.length; i++) {
@@ -564,6 +623,10 @@ function getStringByteLength(str: string): number {
             byteLength += 1;
         } else if (code <= 0x7FF) {
             byteLength += 2;
+        } else if (code >= 0xD800 && code <= 0xDFFF) {
+            // Surrogate pair
+            byteLength += 4;
+            i++; // Skip the next character (low surrogate)
         } else if (code <= 0xFFFF) {
             byteLength += 3;
         } else {
@@ -571,6 +634,87 @@ function getStringByteLength(str: string): number {
         }
     }
     return byteLength;
+}
+
+// Base64 encoding function
+function base64Encode(str: string): string {
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+    let result = '';
+    let i = 0;
+
+    while (i < str.length) {
+        const a = str.charCodeAt(i++);
+        const b = i < str.length ? str.charCodeAt(i++) : 0;
+        const c = i < str.length ? str.charCodeAt(i++) : 0;
+
+        const bitmap = (a << 16) | (b << 8) | c;
+
+        result += chars.charAt((bitmap >> 18) & 63);
+        result += chars.charAt((bitmap >> 12) & 63);
+        result += i - 2 < str.length ? chars.charAt((bitmap >> 6) & 63) : '=';
+        result += i - 1 < str.length ? chars.charAt(bitmap & 63) : '=';
+    }
+
+    return result;
+}
+
+// Base64 decoding function
+function base64Decode(str: string): string {
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+    let result = '';
+    let i = 0;
+
+    // Remove all non-base64 characters
+    str = str.replace(/[^A-Za-z0-9\+\/]/g, '');
+
+    // Process each group of 4 base64 characters
+    while (i < str.length) {
+        const encoded1 = chars.indexOf(str.charAt(i++));
+        const encoded2 = chars.indexOf(str.charAt(i++));
+        const encoded3 = i < str.length ? chars.indexOf(str.charAt(i++)) : 64;
+        const encoded4 = i < str.length ? chars.indexOf(str.charAt(i++)) : 64;
+
+        const bitmap = (encoded1 << 18) | (encoded2 << 12) | (encoded3 << 6) | encoded4;
+
+        result += String.fromCharCode((bitmap >> 16) & 255);
+        if (encoded3 !== 64) result += String.fromCharCode((bitmap >> 8) & 255);
+        if (encoded4 !== 64) result += String.fromCharCode(bitmap & 255);
+    }
+
+    return result;
+}
+
+// Helper function to find bucket region
+async function findBucketRegion(bucketName: string, configuration: SingleRecord): Promise<string> {
+    const regions = ['us-east-1', 'us-west-1', 'us-west-2', 'eu-west-1', 'eu-central-1', 'ap-southeast-1', 'ap-northeast-1'];
+    const configuredRegion = configuration.AWSRegion as string;
+
+    // Try configured region first
+    for (const region of [configuredRegion, ...regions.filter(r => r !== configuredRegion)]) {
+        try {
+            const host = `${bucketName}.s3.${region}.amazonaws.com`;
+            const url = `https://${host}/`;
+
+            const headers = createAWSSignatureV4(
+                configuration,
+                'HEAD',
+                '/',
+                '',
+                { 'Host': host },
+                '',
+                region,
+                's3'
+            );
+
+            await makeAwsRequest('HEAD', url, headers, null, configuration);
+            return region; // If successful, this is the correct region
+        } catch (error: any) {
+            // Continue to next region if this one fails
+            continue;
+        }
+    }
+
+    throw new Error(`Could not find bucket ${bucketName} in any region`);
 }
 
 // Helper function to make AWS API calls with authentication
@@ -1144,7 +1288,6 @@ async function onexecuteUploadObject(
     const bucketName = properties.BucketName as string;
     const key = properties.Key as string;
     const fileContent = parameters.FileContent as string;
-    const fileName = parameters.FileName as string;
     const contentType = parameters.ContentType as string;
     const isBase64 = parameters.IsBase64 as boolean;
 
@@ -1176,10 +1319,9 @@ async function onexecuteUploadObject(
             }
         }
 
-        // If no content type specified and we have a filename, try to guess
-        if (!contentType && (fileName || key)) {
-            const name = fileName || key;
-            const extension = name.split('.').pop()?.toLowerCase();
+        // If no content type specified, try to guess from key
+        if (!contentType && key) {
+            const extension = key.split('.').pop()?.toLowerCase();
             switch (extension) {
                 case 'txt': finalContentType = 'text/plain'; break;
                 case 'json': finalContentType = 'application/json'; break;
@@ -1198,7 +1340,8 @@ async function onexecuteUploadObject(
 
         const bodyLength = getStringByteLength(body);
 
-        const headers = createAWSSignatureV4(
+        // Use special upload version that handles UTF-8 properly
+        const headers = createAWSSignatureV4ForUpload(
             configuration,
             'PUT',
             path,
