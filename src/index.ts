@@ -1,5 +1,5 @@
 import "@k2oss/k2-broker-core";
-
+import { Base64 } from "./base64";
 // Service metadata
 metadata = {
     systemName: "K2AH.JSSP.awss3",
@@ -1280,6 +1280,15 @@ async function onexecuteGetObject(properties: SingleRecord, configuration: Singl
     }
 }
 
+function getBase64FromContent(content: string) {
+    var base64 = "";
+    var split1 = content.split("<content>")[1];
+
+    base64 = split1.split("</content>")[0];
+
+    return base64;
+}
+
 // Upload object to S3
 async function onexecuteUploadObject(
     properties: SingleRecord,
@@ -1314,7 +1323,7 @@ async function onexecuteUploadObject(
         // If base64, decode it
         if (isBase64) {
             try {
-                body = base64Decode(fileContent);
+                body = Base64.decode(getBase64FromContent(fileContent));
             } catch (e) {
                 throw new Error("Invalid base64 content");
             }
