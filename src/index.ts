@@ -184,7 +184,8 @@ ondescribe = async function ({ configuration }): Promise<void> {
                             FileContent: {
                                 displayName: "File Content",
                                 description: "Direct content to upload",
-                                type: "string"
+                                type: "extendedString",
+                                extendedType: "k2.com/2019/memo"
                             },
                             ContentType: {
                                 displayName: "Content Type",
