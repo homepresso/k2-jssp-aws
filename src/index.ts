@@ -196,6 +196,11 @@ ondescribe = async function ({ configuration }): Promise<void> {
                                 displayName: "Is Base64",
                                 description: "Whether the content is base64 encoded",
                                 type: "boolean"
+                            },
+                            ContentLength: {
+                                displayName: "Content Length",
+                                description: "Override the calculated content length (optional)",
+                                type: "number"
                             }
                         },
                         outputs: ["Key", "ETag", "Size", "Status"]
@@ -271,7 +276,8 @@ const Base64 = {
         let enc1: number, enc2: number, enc3: number, enc4: number;
         let i = 0;
 
-        input = input.replace(/[^A-Za-z0-9\+\/\=]/g, "");
+        // Remove whitespace and padding
+        input = input.replace(/[^A-Za-z0-9\+\/]/g, "");
 
         while (i < input.length) {
             enc1 = this._keyStr.indexOf(input.charAt(i++));
@@ -295,6 +301,44 @@ const Base64 = {
 
         output = Base64._utf8_decode(output);
 
+        return output;
+    },
+
+    // public method for decoding binary data (no UTF-8 decoding)
+    decodeBinary: function (input: string): string {
+        let output = "";
+        let chr1: number, chr2: number, chr3: number;
+        let enc1: number, enc2: number, enc3: number, enc4: number;
+        let i = 0;
+
+        // Remove all whitespace and newlines
+        input = input.replace(/[\s\r\n]/g, '');
+
+        while (i < input.length) {
+            enc1 = this._keyStr.indexOf(input.charAt(i++));
+            enc2 = this._keyStr.indexOf(input.charAt(i++));
+            enc3 = this._keyStr.indexOf(input.charAt(i++));
+            enc4 = this._keyStr.indexOf(input.charAt(i++));
+
+            if (enc1 === -1 || enc2 === -1) {
+                break;
+            }
+
+            chr1 = (enc1 << 2) | (enc2 >> 4);
+            output = output + String.fromCharCode(chr1);
+
+            if (enc3 !== -1 && enc3 !== 64) {
+                chr2 = ((enc2 & 15) << 4) | (enc3 >> 2);
+                output = output + String.fromCharCode(chr2);
+            }
+
+            if (enc4 !== -1 && enc4 !== 64) {
+                chr3 = ((enc3 & 3) << 6) | enc4;
+                output = output + String.fromCharCode(chr3);
+            }
+        }
+
+        // Don't do UTF-8 decoding for binary data
         return output;
     },
 
@@ -453,6 +497,117 @@ function sha256(ascii: string): string {
     return result;
 }
 
+// Convert binary string to Uint8Array
+function binaryStringToUint8Array(binaryStr: string): Uint8Array {
+    const bytes = new Uint8Array(binaryStr.length);
+    for (let i = 0; i < binaryStr.length; i++) {
+        bytes[i] = binaryStr.charCodeAt(i) & 0xFF;
+    }
+    return bytes;
+}
+
+// SHA-256 for Uint8Array (binary data)
+function sha256Uint8Array(data: Uint8Array): string {
+    function rightRotate(value: number, amount: number): number {
+        return (value >>> amount) | (value << (32 - amount));
+    }
+
+    const mathPow = Math.pow;
+    const maxWord = mathPow(2, 32);
+    let i: number, j: number;
+    let result = '';
+
+    const words: number[] = [];
+    const bitLength = data.length * 8;
+
+    let hash: number[] = [];
+    const k: number[] = [];
+    let primeCounter = 0;
+
+    const isComposite: { [key: number]: boolean } = {};
+    for (let candidate = 2; primeCounter < 64; candidate++) {
+        if (!isComposite[candidate]) {
+            for (i = 0; i < 313; i += candidate) {
+                isComposite[i] = true;
+            }
+            hash[primeCounter] = (mathPow(candidate, 0.5) * maxWord) | 0;
+            k[primeCounter++] = (mathPow(candidate, 1 / 3) * maxWord) | 0;
+        }
+    }
+
+    // Padding
+    const paddedLength = ((data.length + 9 + 63) & ~63);
+    const padded = new Uint8Array(paddedLength);
+    padded.set(data);
+    padded[data.length] = 0x80;
+
+    // Add length in bits as big-endian 64-bit integer
+    const lengthHigh = (bitLength / maxWord) | 0;
+    const lengthLow = bitLength >>> 0;
+
+    padded[paddedLength - 8] = (lengthHigh >>> 24) & 0xFF;
+    padded[paddedLength - 7] = (lengthHigh >>> 16) & 0xFF;
+    padded[paddedLength - 6] = (lengthHigh >>> 8) & 0xFF;
+    padded[paddedLength - 5] = lengthHigh & 0xFF;
+    padded[paddedLength - 4] = (lengthLow >>> 24) & 0xFF;
+    padded[paddedLength - 3] = (lengthLow >>> 16) & 0xFF;
+    padded[paddedLength - 2] = (lengthLow >>> 8) & 0xFF;
+    padded[paddedLength - 1] = lengthLow & 0xFF;
+
+    // Convert to words
+    for (i = 0; i < paddedLength; i += 4) {
+        words[i >> 2] = (padded[i] << 24) | (padded[i + 1] << 16) | (padded[i + 2] << 8) | padded[i + 3];
+    }
+
+    // Process blocks
+    for (j = 0; j < words.length; j += 16) {
+        const w: number[] = words.slice(j, j + 16);
+        const oldHash = hash.slice(0);
+
+        for (i = 0; i < 64; i++) {
+            if (i >= 16) {
+                const w15 = w[i - 15], w2 = w[i - 2];
+                w[i] = (w[i - 16]
+                    + (rightRotate(w15, 7) ^ rightRotate(w15, 18) ^ (w15 >>> 3))
+                    + w[i - 7]
+                    + (rightRotate(w2, 17) ^ rightRotate(w2, 19) ^ (w2 >>> 10))) | 0;
+            }
+
+            const a = hash[0], e = hash[4];
+            const temp1 = hash[7]
+                + (rightRotate(e, 6) ^ rightRotate(e, 11) ^ rightRotate(e, 25))
+                + ((e & hash[5]) ^ ((~e) & hash[6]))
+                + k[i]
+                + w[i];
+
+            const temp2 = (rightRotate(a, 2) ^ rightRotate(a, 13) ^ rightRotate(a, 22))
+                + ((a & hash[1]) ^ (a & hash[2]) ^ (hash[1] & hash[2]));
+
+            hash = [(temp1 + temp2) | 0].concat(hash);
+            hash[4] = (hash[4] + temp1) | 0;
+        }
+
+        for (i = 0; i < 8; i++) {
+            hash[i] = (hash[i] + oldHash[i]) | 0;
+        }
+    }
+
+    for (i = 0; i < 8; i++) {
+        for (j = 3; j + 1; j--) {
+            const b = (hash[i] >> (j * 8)) & 255;
+            result += ((b < 16) ? 0 : '') + b.toString(16);
+        }
+    }
+    return result;
+}
+
+// SHA-256 for binary content (handles binary data properly)
+function sha256Binary(binaryData: string): string {
+    // Convert binary string to Uint8Array and calculate hash
+    const bytes = binaryStringToUint8Array(binaryData);
+    return sha256Uint8Array(bytes);
+}
+
 // SHA-256 for UTF-8 content
 function sha256UTF8(message: string): string {
     // Convert string to UTF-8 bytes
@@ -526,6 +681,47 @@ function hmacSHA256(key: string, message: string): string {
     return sha256(oKeyPad + innerHashStr);
 }
 
+// HMAC-SHA256 implementation with binary key support
+function hmacSHA256Binary(key: string, message: string, keyIsBinary: boolean = false): string {
+    const blockSize = 64;
+    let computedKey = key;
+
+    if (key.length > blockSize) {
+        if (keyIsBinary) {
+            computedKey = sha256Binary(key);
+        } else {
+            computedKey = sha256(key);
+        }
+        // Convert hex to string
+        let temp = '';
+        for (let i = 0; i < computedKey.length; i += 2) {
+            temp += String.fromCharCode(parseInt(computedKey.substr(i, 2), 16));
+        }
+        computedKey = temp;
+    }
+
+    while (computedKey.length < blockSize) {
+        computedKey += '\x00';
+    }
+
+    let oKeyPad = '';
+    let iKeyPad = '';
+    for (let i = 0; i < blockSize; i++) {
+        const byte = computedKey.charCodeAt(i) & 0xFF;
+        oKeyPad += String.fromCharCode(byte ^ 0x5c);
+        iKeyPad += String.fromCharCode(byte ^ 0x36);
+    }
+
+    const innerHash = sha256(iKeyPad + message);
+    // Convert hex to string for outer hash
+    let innerHashStr = '';
+    for (let i = 0; i < innerHash.length; i += 2) {
+        innerHashStr += String.fromCharCode(parseInt(innerHash.substr(i, 2), 16));
+    }
+
+    return sha256(oKeyPad + innerHashStr);
+}
+
 // Convert string to hex
 function toHex(str: string): string {
     let hex = '';
@@ -543,6 +739,40 @@ function hexToString(hex: string): string {
         str += String.fromCharCode(parseInt(hex.substr(i, 2), 16));
     }
     return str;
+}
+
+// Alternative base64 decoder for comparison
+function alternativeBase64Decode(input: string): string {
+    // Remove whitespace
+    input = input.replace(/[\s\r\n]/g, '');
+
+    // Standard base64 alphabet
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+
+    let output = '';
+    let buffer = 0;
+    let bits = 0;
+
+    for (let i = 0; i < input.length; i++) {
+        const char = input[i];
+        if (char === '=') break;
+
+        const value = chars.indexOf(char);
+        if (value === -1) {
+            console.warn(`Invalid base64 character at position ${i}: ${char}`);
+            continue;
+        }
+
+        buffer = (buffer << 6) | value;
+        bits += 6;
+
+        if (bits >= 8) {
+            bits -= 8;
+            output += String.fromCharCode((buffer >> bits) & 0xFF);
+        }
+    }
+
+    return output;
 }
 
 // AWS Signature V4 implementation
@@ -667,11 +897,16 @@ function createAWSSignatureV4ForUpload(
     // Calculate payload hash - handle binary vs text content
     let payloadHash: string;
     if (isBinaryPayload) {
-        // For binary content (like decoded base64), use direct SHA256
-        payloadHash = sha256(payload || '');
+        // For binary content (like decoded base64), use binary-safe SHA256
+        payloadHash = sha256Binary(payload || '');
+        console.log("Binary payload hash:", payloadHash);
+        if (!payloadHash) {
+            console.error("Binary SHA256 returned empty hash!");
+        }
     } else {
         // For text content, use UTF-8 aware version
         payloadHash = sha256UTF8(payload || '');
+        console.log("Text payload hash:", payloadHash);
     }
 
     // Create canonical headers
@@ -749,6 +984,12 @@ function createAWSSignatureV4ForUpload(
     return resultHeaders;
 }
 
+// Calculate string byte length for binary content
+function getBinaryStringByteLength(str: string): number {
+    // For binary strings, each character represents exactly one byte
+    return str.length;
+}
+
 // Calculate string byte length
 function getStringByteLength(str: string): number {
     let byteLength = 0;
@@ -819,7 +1060,7 @@ function base64Decode(str: string): string {
     return result;
 }
 
-// FIXED: Helper function to extract base64 content
+// Helper function to extract base64 content
 function getBase64FromContent(content: string): string {
     if (!content) {
         return "";
@@ -940,7 +1181,6 @@ function parseXmlResponse(xmlText: string): any {
     const bucketMatches = xmlText.match(bucketRegex);
     if (bucketMatches) {
         result.Buckets = bucketMatches.map(bucketXml => {
-            // FIXED: The regex was missing "ame" in "Name"
             const name = (bucketXml.match(/<Name>(.*?)<\/Name>/) || [])[1];
             const creationDate = (bucketXml.match(/<CreationDate>(.*?)<\/CreationDate>/) || [])[1];
             return {
@@ -1431,7 +1671,7 @@ async function onexecuteGetObject(properties: SingleRecord, configuration: Singl
     }
 }
 
-// FIXED: Upload object to S3
+// Upload object to S3 - FIXED FOR CLEARSCRIPT
 async function onexecuteUploadObject(
     properties: SingleRecord,
     parameters: SingleRecord,
@@ -1442,6 +1682,14 @@ async function onexecuteUploadObject(
     let fileContent = parameters.FileContent as string;
     const contentType = parameters.ContentType as string;
     const isBase64 = parameters.IsBase64 as boolean;
+
+    console.log("UploadObject called with:", {
+        bucketName,
+        key,
+        contentType,
+        isBase64,
+        contentLength: fileContent ? fileContent.length : 0
+    });
 
     if (!bucketName || !key) {
         throw new Error("BucketName and Key are required");
@@ -1458,77 +1706,74 @@ async function onexecuteUploadObject(
         const url = `https://${host}/${encodeURIComponent(key)}`;
         const path = `/${key}`;
 
-        // Handle file content
-        let body: string = fileContent;
+        let bodyToSend: string = fileContent;
+        let signatureBody: string = fileContent;
         let finalContentType = contentType || 'application/octet-stream';
-        let isBinaryContent = false;
+        let actualContentLength: number;
 
-        // FIXED: Handle base64 content properly
         if (isBase64) {
-            try {
-                // Extract base64 content more flexibly
-                let base64Content = fileContent;
-
-                // Only try to extract from tags if they exist
-                if (fileContent.includes('<content>')) {
-                    base64Content = getBase64FromContent(fileContent);
-                }
-
-                // Ensure we have content before decoding
-                if (!base64Content || base64Content.length === 0) {
-                    throw new Error("Base64 content is empty after extraction");
-                }
-
-                // Debug logging
-                console.log("Base64 input length:", base64Content.length);
-                console.log("First 50 chars of base64:", base64Content.substring(0, 50));
-
-                body = Base64.decode(base64Content);
-
-                // Verify the decode worked
-                if (!body || body.length === 0) {
-                    throw new Error("Base64 decode resulted in empty content");
-                }
-
-                console.log("Decoded body length:", body.length);
-                console.log("First 50 chars of decoded:", body.substring(0, 50));
-
-                // Mark as binary content since we decoded from base64
-                isBinaryContent = true;
-
-            } catch (e: any) {
-                console.error("Base64 decode error:", e);
-                throw new Error("Invalid base64 content: " + e.message);
+            // Extract base64 content if wrapped
+            if (fileContent.includes('<content>')) {
+                bodyToSend = getBase64FromContent(fileContent);
+            } else {
+                bodyToSend = fileContent;
             }
+            bodyToSend = bodyToSend.trim();
+
+            console.log("Processing base64 content");
+            console.log("Base64 length:", bodyToSend.length);
+            console.log("First 100 chars:", bodyToSend.substring(0, 100));
+
+            // For signature calculation, we need the decoded binary
+            try {
+                signatureBody = Base64.decodeBinary(bodyToSend);
+                console.log("Decoded length for signature:", signatureBody.length);
+            } catch (e) {
+                console.error("Failed to decode base64 for signature:", e);
+                throw new Error("Invalid base64 content");
+            }
+
+            // IMPORTANT: For ClearScript XMLHttpRequest, we MUST send the base64 string
+            // The file will be stored as base64 on S3
+            console.log("Will send as base64 to avoid XMLHttpRequest binary issues");
+
+            // Use the base64 length for Content-Length
+            actualContentLength = bodyToSend.length;
+
+        } else {
+            // For text content, calculate UTF-8 byte length
+            actualContentLength = getStringByteLength(bodyToSend);
+            signatureBody = bodyToSend;
         }
 
-        // If no content type specified, try to guess from key
+        // Determine content type from extension if not provided
         if (!contentType && key) {
             const extension = key.split('.').pop()?.toLowerCase();
             const contentTypeMap: { [key: string]: string } = {
                 'txt': 'text/plain',
                 'json': 'application/json',
                 'xml': 'application/xml',
+                'html': 'text/html',
+                'css': 'text/css',
+                'js': 'application/javascript',
                 'pdf': 'application/pdf',
                 'jpg': 'image/jpeg',
                 'jpeg': 'image/jpeg',
                 'png': 'image/png',
-                'gif': 'image/gif',
-                'html': 'text/html',
-                'css': 'text/css',
-                'js': 'application/javascript'
+                'gif': 'image/gif'
             };
             finalContentType = contentTypeMap[extension || ''] || 'application/octet-stream';
         }
 
-        const bodyLength = getStringByteLength(body);
+        console.log("Upload parameters:");
+        console.log("- Region:", region);
+        console.log("- Content-Type:", finalContentType);
+        console.log("- Content-Length:", actualContentLength);
+        console.log("- Body type:", typeof bodyToSend);
+        console.log("- Body length:", bodyToSend.length);
 
-        // Debug logging
-        console.log("Calculated body byte length:", bodyLength);
-        console.log("Is binary content:", isBinaryContent);
-
-        // Use special upload version that handles UTF-8 properly
-        // Pass isBinaryContent flag to handle binary payloads correctly
+        // Create signature
+        // When sending base64, we use the base64 string for both signature and body
         const headers = createAWSSignatureV4ForUpload(
             configuration,
             'PUT',
@@ -1537,28 +1782,45 @@ async function onexecuteUploadObject(
             {
                 'Host': host,
                 'Content-Type': finalContentType,
-                'Content-Length': bodyLength.toString()
+                'Content-Length': actualContentLength.toString()
             },
-            body,
+            bodyToSend,  // Use the actual body being sent for signature
             region,
             's3',
-            isBinaryContent  // Pass the binary flag
+            false  // Not binary since we're sending base64 or text
         );
 
-        // Debug: verify Content-Length is in headers
-        console.log("Headers being sent:", headers);
+        console.log("Request headers:", JSON.stringify(headers, null, 2));
 
-        const response = await makeAwsRequest('PUT', url, headers, body, configuration);
+        // Make the request
+        const response = await makeAwsRequest('PUT', url, headers, bodyToSend, configuration);
+
+        console.log("Upload successful!");
+        console.log("Response status:", response.status);
+        console.log("ETag:", response.headers.etag);
 
         postResult({
             Key: key,
             ETag: (response.headers.etag || '').replace(/"/g, ''),
-            Size: bodyLength,
-            Status: 'Success'
+            Size: actualContentLength,
+            Status: 'Success' + (isBase64 ? ' (stored as base64)' : '')
         });
 
     } catch (error: any) {
-        console.error("UploadObject error details:", error);
+        console.error("UploadObject failed:", error);
+
+        if (error.message.includes("Unsupported body type")) {
+            console.error("XMLHttpRequest cannot send this body type");
+        //    console.error("Body type:", typeof bodyToSend);
+       //     console.error("Body sample:", bodyToSend ? bodyToSend.substring(0, 50) : 'null');
+        }
+
+        if (error.message.includes("403") || error.message.includes("SignatureDoesNotMatch")) {
+            console.error("Signature mismatch - this usually means:");
+            console.error("1. The Content-Length doesn't match what's being sent");
+            console.error("2. The signature was calculated with different data than what's sent");
+        }
+
         throw new Error(`UploadObject failed: ${error.message}`);
     }
 }
@@ -1603,14 +1865,24 @@ async function onexecuteDownloadObject(
         // Get content
         let content = response.data;
 
-        // If binary content is expected (based on content type), encode to base64
+        // Get content type
         const contentType = response.headers['content-type'] || 'application/octet-stream';
+
+        // Check if the content is already base64 (if it was uploaded as base64)
+        // You might want to add logic here to detect if content is already base64
+
+        // If binary content is expected (based on content type), encode to base64
         const isBinary = !contentType.startsWith('text/') &&
             contentType !== 'application/json' &&
             contentType !== 'application/xml';
 
-        if (returnAsBase64 || isBinary) {
+        if (returnAsBase64 && !isBinary) {
+            // Encode text content to base64 if requested
             content = base64Encode(content);
+        } else if (!returnAsBase64 && isBinary) {
+            // Binary content but not requested as base64
+            // XMLHttpRequest might have already corrupted it
+            console.warn("Binary content downloaded as text - may be corrupted");
         }
 
         postResult({
