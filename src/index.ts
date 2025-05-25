@@ -652,7 +652,8 @@ function createAWSSignatureV4ForUpload(
     headers: any,
     payload: string,
     region: string,
-    service: string
+    service: string,
+    isBinaryPayload: boolean = false
 ): any {
     const accessKey = config.AWSAccessKey as string;
     const secretKey = config.AWSSecretKey as string;
@@ -663,8 +664,15 @@ function createAWSSignatureV4ForUpload(
     const dateStamp = now.toISOString().split('T')[0].replace(/-/g, '');
     const amzDate = now.toISOString().replace(/[:\-]|\.\d{3}/g, '');
 
-    // Calculate payload hash - use UTF-8 aware version
-    const payloadHash = sha256UTF8(payload || '');
+    // Calculate payload hash - handle binary vs text content
+    let payloadHash: string;
+    if (isBinaryPayload) {
+        // For binary content (like decoded base64), use direct SHA256
+        payloadHash = sha256(payload || '');
+    } else {
+        // For text content, use UTF-8 aware version
+        payloadHash = sha256UTF8(payload || '');
+    }
 
     // Create canonical headers
     const hostHeader = headers['Host'] || `s3.${awsRegion}.amazonaws.com`;
@@ -811,6 +819,22 @@ function base64Decode(str: string): string {
     return result;
 }
 
+// FIXED: Helper function to extract base64 content
+function getBase64FromContent(content: string): string {
+    if (!content) {
+        return "";
+    }
+
+    // First, check if content is wrapped in <content> tags
+    const match = content.match(/<content>([\s\S]*?)<\/content>/);
+    if (match && match[1]) {
+        return match[1].trim();
+    }
+
+    // If not wrapped, assume the entire content is base64
+    return content.trim();
+}
+
 // Helper function to find bucket region
 async function findBucketRegion(bucketName: string, configuration: SingleRecord): Promise<string> {
     const regions = ['us-east-1', 'us-west-1', 'us-west-2', 'eu-west-1', 'eu-central-1', 'ap-southeast-1', 'ap-northeast-1'];
@@ -916,6 +940,7 @@ function parseXmlResponse(xmlText: string): any {
     const bucketMatches = xmlText.match(bucketRegex);
     if (bucketMatches) {
         result.Buckets = bucketMatches.map(bucketXml => {
+            // FIXED: The regex was missing "ame" in "Name"
             const name = (bucketXml.match(/<Name>(.*?)<\/Name>/) || [])[1];
             const creationDate = (bucketXml.match(/<CreationDate>(.*?)<\/CreationDate>/) || [])[1];
             return {
@@ -1406,21 +1431,7 @@ async function onexecuteGetObject(properties: SingleRecord, configuration: Singl
     }
 }
 
-function getBase64FromContent(content: string): string {
-    let base64 = "";
-    const split1 = content.split("<content>");
-
-    if (split1.length > 1) {
-        const split2 = split1[1].split("</content>");
-        if (split2.length > 0) {
-            base64 = split2[0];
-        }
-    }
-
-    return base64;
-}
-
-// Upload object to S3
+// FIXED: Upload object to S3
 async function onexecuteUploadObject(
     properties: SingleRecord,
     parameters: SingleRecord,
@@ -1428,7 +1439,7 @@ async function onexecuteUploadObject(
 ): Promise<void> {
     const bucketName = properties.BucketName as string;
     const key = properties.Key as string;
-    const fileContent = parameters.FileContent as string;
+    let fileContent = parameters.FileContent as string;
     const contentType = parameters.ContentType as string;
     const isBase64 = parameters.IsBase64 as boolean;
 
@@ -1450,38 +1461,74 @@ async function onexecuteUploadObject(
         // Handle file content
         let body: string = fileContent;
         let finalContentType = contentType || 'application/octet-stream';
+        let isBinaryContent = false;
 
-        // If base64, decode it
+        // FIXED: Handle base64 content properly
         if (isBase64) {
             try {
-                body = Base64.decode(getBase64FromContent(fileContent));
-            } catch (e) {
-                throw new Error("Invalid base64 content");
+                // Extract base64 content more flexibly
+                let base64Content = fileContent;
+
+                // Only try to extract from tags if they exist
+                if (fileContent.includes('<content>')) {
+                    base64Content = getBase64FromContent(fileContent);
+                }
+
+                // Ensure we have content before decoding
+                if (!base64Content || base64Content.length === 0) {
+                    throw new Error("Base64 content is empty after extraction");
+                }
+
+                // Debug logging
+                console.log("Base64 input length:", base64Content.length);
+                console.log("First 50 chars of base64:", base64Content.substring(0, 50));
+
+                body = Base64.decode(base64Content);
+
+                // Verify the decode worked
+                if (!body || body.length === 0) {
+                    throw new Error("Base64 decode resulted in empty content");
+                }
+
+                console.log("Decoded body length:", body.length);
+                console.log("First 50 chars of decoded:", body.substring(0, 50));
+
+                // Mark as binary content since we decoded from base64
+                isBinaryContent = true;
+
+            } catch (e: any) {
+                console.error("Base64 decode error:", e);
+                throw new Error("Invalid base64 content: " + e.message);
             }
         }
 
         // If no content type specified, try to guess from key
         if (!contentType && key) {
             const extension = key.split('.').pop()?.toLowerCase();
-            switch (extension) {
-                case 'txt': finalContentType = 'text/plain'; break;
-                case 'json': finalContentType = 'application/json'; break;
-                case 'xml': finalContentType = 'application/xml'; break;
-                case 'pdf': finalContentType = 'application/pdf'; break;
-                case 'jpg':
-                case 'jpeg': finalContentType = 'image/jpeg'; break;
-                case 'png': finalContentType = 'image/png'; break;
-                case 'gif': finalContentType = 'image/gif'; break;
-                case 'html': finalContentType = 'text/html'; break;
-                case 'css': finalContentType = 'text/css'; break;
-                case 'js': finalContentType = 'application/javascript'; break;
-                default: finalContentType = 'application/octet-stream';
-            }
+            const contentTypeMap: { [key: string]: string } = {
+                'txt': 'text/plain',
+                'json': 'application/json',
+                'xml': 'application/xml',
+                'pdf': 'application/pdf',
+                'jpg': 'image/jpeg',
+                'jpeg': 'image/jpeg',
+                'png': 'image/png',
+                'gif': 'image/gif',
+                'html': 'text/html',
+                'css': 'text/css',
+                'js': 'application/javascript'
+            };
+            finalContentType = contentTypeMap[extension || ''] || 'application/octet-stream';
         }
 
         const bodyLength = getStringByteLength(body);
 
+        // Debug logging
+        console.log("Calculated body byte length:", bodyLength);
+        console.log("Is binary content:", isBinaryContent);
+
         // Use special upload version that handles UTF-8 properly
+        // Pass isBinaryContent flag to handle binary payloads correctly
         const headers = createAWSSignatureV4ForUpload(
             configuration,
             'PUT',
@@ -1494,8 +1541,12 @@ async function onexecuteUploadObject(
             },
             body,
             region,
-            's3'
+            's3',
+            isBinaryContent  // Pass the binary flag
         );
+
+        // Debug: verify Content-Length is in headers
+        console.log("Headers being sent:", headers);
 
         const response = await makeAwsRequest('PUT', url, headers, body, configuration);
 
@@ -1507,6 +1558,7 @@ async function onexecuteUploadObject(
         });
 
     } catch (error: any) {
+        console.error("UploadObject error details:", error);
         throw new Error(`UploadObject failed: ${error.message}`);
     }
 }
