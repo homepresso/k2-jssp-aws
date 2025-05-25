@@ -30,8 +30,6 @@ metadata = {
         }
     }
 };
-
-// Service schema description
 ondescribe = async function ({ configuration }): Promise<void> {
     postSchema({
         objects: {
@@ -77,15 +75,8 @@ ondescribe = async function ({ configuration }): Promise<void> {
                     CreateBucket: {
                         displayName: "Create Bucket",
                         type: "create",
-                        description: "Creates a new S3 bucket",
+                        description: "Creates a new S3 bucket in the configured region",
                         inputs: ["BucketName"],
-                        parameters: {
-                            Region: {
-                                displayName: "Region",
-                                description: "AWS region for bucket creation (optional)",
-                                type: "string"
-                            }
-                        },
                         outputs: ["BucketName", "Status", "Region"]
                     },
                     DeleteBucket: {
@@ -213,11 +204,11 @@ ondescribe = async function ({ configuration }): Promise<void> {
                         parameters: {
                             ReturnAsBase64: {
                                 displayName: "Return as Base64",
-                                description: "Return content as base64 encoded",
+                                description: "Return content as base64 encoded (recommended for binary files)",
                                 type: "boolean"
                             }
                         },
-                        outputs: ["Key", "ContentType", "Size", "FileContent", "Status"]
+                        outputs: ["Key", "ContentType", "Size", "FileContent", "FileName", "Status"]
                     },
                     DeleteObject: {
                         displayName: "Delete Object",
@@ -231,7 +222,6 @@ ondescribe = async function ({ configuration }): Promise<void> {
         }
     });
 };
-
 // Base64 utility object
 const Base64 = {
     // private property
@@ -1368,7 +1358,7 @@ async function onexecuteCreateBucket(
     configuration: SingleRecord
 ): Promise<void> {
     const bucketName = properties.BucketName as string;
-    const region = (parameters.Region || configuration.AWSRegion) as string;
+    const region = configuration.AWSRegion as string; // Always use config region
 
     if (!bucketName) {
         throw new Error("BucketName is required");
@@ -1382,6 +1372,7 @@ async function onexecuteCreateBucket(
         let body = '';
         const headers: any = { 'Host': host };
 
+        // For regions other than us-east-1, we need to specify the location constraint
         if (region !== 'us-east-1') {
             body = `<CreateBucketConfiguration><LocationConstraint>${region}</LocationConstraint></CreateBucketConfiguration>`;
             headers['Content-Type'] = 'application/xml';
@@ -1826,6 +1817,8 @@ async function onexecuteUploadObject(
 }
 
 // Download object from S3
+
+// Download object from S3 - with option to return as base64 or raw
 async function onexecuteDownloadObject(
     properties: SingleRecord,
     parameters: SingleRecord,
@@ -1864,32 +1857,125 @@ async function onexecuteDownloadObject(
 
         // Get content
         let content = response.data;
+        const storedContentType = response.headers['content-type'] || '';
+        const originalSize = parseInt(response.headers['content-length'] || '0');
 
-        // Get content type
-        const contentType = response.headers['content-type'] || 'application/octet-stream';
+        console.log("Downloaded file info:", {
+            key,
+            fileName,
+            storedContentType,
+            contentLength: content.length,
+            returnAsBase64,
+            first50Chars: content.substring(0, 50)
+        });
 
-        // Check if the content is already base64 (if it was uploaded as base64)
-        // You might want to add logic here to detect if content is already base64
+        // Determine the actual content type based on file extension
+        const extension = fileName.split('.').pop()?.toLowerCase() || '';
+        const contentTypeMap: { [key: string]: string } = {
+            // Images
+            'jpg': 'image/jpeg',
+            'jpeg': 'image/jpeg',
+            'png': 'image/png',
+            'gif': 'image/gif',
+            'bmp': 'image/bmp',
+            'webp': 'image/webp',
+            'svg': 'image/svg+xml',
+            'ico': 'image/x-icon',
 
-        // If binary content is expected (based on content type), encode to base64
-        const isBinary = !contentType.startsWith('text/') &&
-            contentType !== 'application/json' &&
-            contentType !== 'application/xml';
+            // Documents
+            'pdf': 'application/pdf',
+            'doc': 'application/msword',
+            'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            'xls': 'application/vnd.ms-excel',
+            'xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'ppt': 'application/vnd.ms-powerpoint',
+            'pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
 
-        if (returnAsBase64 && !isBinary) {
-            // Encode text content to base64 if requested
-            content = base64Encode(content);
-        } else if (!returnAsBase64 && isBinary) {
-            // Binary content but not requested as base64
-            // XMLHttpRequest might have already corrupted it
-            console.warn("Binary content downloaded as text - may be corrupted");
+            // Text
+            'txt': 'text/plain',
+            'csv': 'text/csv',
+            'json': 'application/json',
+            'xml': 'application/xml',
+            'html': 'text/html',
+            'css': 'text/css',
+            'js': 'application/javascript',
+
+            // Archives
+            'zip': 'application/zip',
+            'rar': 'application/x-rar-compressed',
+            '7z': 'application/x-7z-compressed',
+            'tar': 'application/x-tar',
+            'gz': 'application/gzip',
+
+            // Other
+            'mp4': 'video/mp4',
+            'mp3': 'audio/mpeg',
+            'wav': 'audio/wav'
+        };
+
+        // Use the mapped content type or fall back to stored/default
+        let actualContentType = contentTypeMap[extension];
+        if (!actualContentType) {
+            actualContentType = storedContentType || 'application/octet-stream';
+        }
+
+        // Check if content is already base64 (files uploaded with our broker)
+        const isBase64Content = /^[A-Za-z0-9+/]+=*$/.test(content.trim());
+
+        // Check if this is a binary file type
+        const textExtensions = ['txt', 'json', 'xml', 'html', 'css', 'js', 'csv'];
+        const isTextFile = textExtensions.includes(extension) || actualContentType.startsWith('text/');
+
+        let finalContent: string;
+
+        if (returnAsBase64) {
+            // User wants base64 output
+            if (isBase64Content && !isTextFile) {
+                // Binary file already stored as base64 - return as-is
+                console.log("ReturnAsBase64=true: Binary file already base64, returning as-is");
+                finalContent = content.trim();
+            } else if (!isBase64Content) {
+                // Not base64, need to encode it
+                console.log("ReturnAsBase64=true: Encoding content to base64");
+                finalContent = Base64.encode(content);
+            } else {
+                // Already base64 (text file stored as base64)
+                console.log("ReturnAsBase64=true: Already base64, returning as-is");
+                finalContent = content.trim();
+            }
+        } else {
+            // User wants raw content (file stream)
+            if (isBase64Content && !isTextFile) {
+                // Binary file stored as base64 - decode it
+                console.log("ReturnAsBase64=false: Decoding base64 binary file");
+                try {
+                    finalContent = Base64.decodeBinary(content.trim());
+                } catch (e) {
+                    console.error("Failed to decode base64:", e);
+                    // Fall back to returning as-is
+                    finalContent = content;
+                }
+            } else if (isBase64Content && isTextFile) {
+                // Text file stored as base64 - decode it
+                console.log("ReturnAsBase64=false: Decoding base64 text file");
+                try {
+                    finalContent = Base64.decode(content.trim());
+                } catch (e) {
+                    console.error("Failed to decode base64:", e);
+                    finalContent = content;
+                }
+            } else {
+                // Already raw content
+                console.log("ReturnAsBase64=false: Returning raw content");
+                finalContent = content;
+            }
         }
 
         postResult({
             Key: key,
-            ContentType: contentType,
-            Size: parseInt(response.headers['content-length'] || '0'),
-            FileContent: content,
+            ContentType: actualContentType,
+            Size: originalSize,
+            FileContent: finalContent,
             FileName: fileName,
             Status: 'Success'
         });
@@ -1898,7 +1984,6 @@ async function onexecuteDownloadObject(
         throw new Error(`DownloadObject failed: ${error.message}`);
     }
 }
-
 // Delete object from S3
 async function onexecuteDeleteObject(properties: SingleRecord, configuration: SingleRecord): Promise<void> {
     const bucketName = properties.BucketName as string;
