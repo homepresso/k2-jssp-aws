@@ -187,12 +187,8 @@ ondescribe = async function ({ configuration }): Promise<void> {
                                 displayName: "Is Base64",
                                 description: "Whether the content is base64 encoded",
                                 type: "boolean"
-                            },
-                            ContentLength: {
-                                displayName: "Content Length",
-                                description: "Override the calculated content length (optional)",
-                                type: "number"
                             }
+                            // Removed ContentLength parameter
                         },
                         outputs: ["Key", "ETag", "Size", "Status"]
                     },
@@ -222,6 +218,7 @@ ondescribe = async function ({ configuration }): Promise<void> {
         }
     });
 };
+
 // Base64 utility object
 const Base64 = {
     // private property
@@ -1673,6 +1670,7 @@ async function onexecuteUploadObject(
     let fileContent = parameters.FileContent as string;
     const contentType = parameters.ContentType as string;
     const isBase64 = parameters.IsBase64 as boolean;
+    // Removed: const overrideContentLength = parameters.ContentLength as number;
 
     console.log("UploadObject called with:", {
         bucketName,
@@ -1701,6 +1699,7 @@ async function onexecuteUploadObject(
         let signatureBody: string = fileContent;
         let finalContentType = contentType || 'application/octet-stream';
         let actualContentLength: number;
+        let originalFileSize: number = 0;
 
         if (isBase64) {
             // Extract base64 content if wrapped
@@ -1713,19 +1712,18 @@ async function onexecuteUploadObject(
 
             console.log("Processing base64 content");
             console.log("Base64 length:", bodyToSend.length);
-            console.log("First 100 chars:", bodyToSend.substring(0, 100));
 
             // For signature calculation, we need the decoded binary
             try {
                 signatureBody = Base64.decodeBinary(bodyToSend);
+                originalFileSize = signatureBody.length;
                 console.log("Decoded length for signature:", signatureBody.length);
             } catch (e) {
                 console.error("Failed to decode base64 for signature:", e);
                 throw new Error("Invalid base64 content");
             }
 
-            // IMPORTANT: For ClearScript XMLHttpRequest, we MUST send the base64 string
-            // The file will be stored as base64 on S3
+            // For ClearScript XMLHttpRequest, we MUST send the base64 string
             console.log("Will send as base64 to avoid XMLHttpRequest binary issues");
 
             // Use the base64 length for Content-Length
@@ -1734,6 +1732,7 @@ async function onexecuteUploadObject(
         } else {
             // For text content, calculate UTF-8 byte length
             actualContentLength = getStringByteLength(bodyToSend);
+            originalFileSize = actualContentLength;
             signatureBody = bodyToSend;
         }
 
@@ -1751,7 +1750,13 @@ async function onexecuteUploadObject(
                 'jpg': 'image/jpeg',
                 'jpeg': 'image/jpeg',
                 'png': 'image/png',
-                'gif': 'image/gif'
+                'gif': 'image/gif',
+                'bmp': 'image/bmp',
+                'doc': 'application/msword',
+                'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+                'xls': 'application/vnd.ms-excel',
+                'xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                'zip': 'application/zip'
             };
             finalContentType = contentTypeMap[extension || ''] || 'application/octet-stream';
         }
@@ -1759,26 +1764,32 @@ async function onexecuteUploadObject(
         console.log("Upload parameters:");
         console.log("- Region:", region);
         console.log("- Content-Type:", finalContentType);
-        console.log("- Content-Length:", actualContentLength);
-        console.log("- Body type:", typeof bodyToSend);
-        console.log("- Body length:", bodyToSend.length);
+        console.log("- Content-Length (calculated):", actualContentLength);
+        console.log("- Original file size:", originalFileSize);
 
-        // Create signature
-        // When sending base64, we use the base64 string for both signature and body
+        // Create headers with K2 metadata
+        const uploadHeaders: any = {
+            'Host': host,
+            'Content-Type': finalContentType,
+            'Content-Length': actualContentLength.toString(),
+            // Add K2 metadata
+            'x-amz-meta-k2-uploaded': 'true',
+            'x-amz-meta-k2-base64': isBase64 ? 'true' : 'false',
+            'x-amz-meta-k2-original-size': originalFileSize.toString(),
+            'x-amz-meta-k2-upload-date': new Date().toISOString()
+        };
+
+        // Create signature with metadata headers
         const headers = createAWSSignatureV4ForUpload(
             configuration,
             'PUT',
             path,
             '',
-            {
-                'Host': host,
-                'Content-Type': finalContentType,
-                'Content-Length': actualContentLength.toString()
-            },
-            bodyToSend,  // Use the actual body being sent for signature
+            uploadHeaders,
+            bodyToSend,
             region,
             's3',
-            false  // Not binary since we're sending base64 or text
+            false
         );
 
         console.log("Request headers:", JSON.stringify(headers, null, 2));
@@ -1794,31 +1805,16 @@ async function onexecuteUploadObject(
             Key: key,
             ETag: (response.headers.etag || '').replace(/"/g, ''),
             Size: actualContentLength,
-            Status: 'Success' + (isBase64 ? ' (stored as base64)' : '')
+            Status: 'Success' + (isBase64 ? ' (stored as base64 with K2 metadata)' : '')
         });
 
     } catch (error: any) {
         console.error("UploadObject failed:", error);
-
-        if (error.message.includes("Unsupported body type")) {
-            console.error("XMLHttpRequest cannot send this body type");
-        //    console.error("Body type:", typeof bodyToSend);
-       //     console.error("Body sample:", bodyToSend ? bodyToSend.substring(0, 50) : 'null');
-        }
-
-        if (error.message.includes("403") || error.message.includes("SignatureDoesNotMatch")) {
-            console.error("Signature mismatch - this usually means:");
-            console.error("1. The Content-Length doesn't match what's being sent");
-            console.error("2. The signature was calculated with different data than what's sent");
-        }
-
         throw new Error(`UploadObject failed: ${error.message}`);
     }
 }
 
-// Download object from S3
-
-// Download object from S3 - with option to return as base64 or raw
+// Download object from S3 
 async function onexecuteDownloadObject(
     properties: SingleRecord,
     parameters: SingleRecord,
@@ -1839,7 +1835,47 @@ async function onexecuteDownloadObject(
         const url = `https://${host}/${encodeURIComponent(key)}`;
         const path = `/${key}`;
 
-        const headers = createAWSSignatureV4(
+        // First, make a HEAD request to get metadata
+        console.log("Checking file metadata...");
+        const headHeaders = createAWSSignatureV4(
+            configuration,
+            'HEAD',
+            path,
+            '',
+            { 'Host': host },
+            '',
+            region,
+            's3'
+        );
+
+        let isK2Upload = false;
+        let isK2Base64 = false;
+        let k2OriginalSize = 0;
+
+        try {
+            const headResponse = await makeAwsRequest('HEAD', url, headHeaders, null, configuration);
+
+            // Check for K2 metadata
+            const k2Uploaded = headResponse.headers['x-amz-meta-k2-uploaded'];
+            const k2Base64 = headResponse.headers['x-amz-meta-k2-base64'];
+            const k2Size = headResponse.headers['x-amz-meta-k2-original-size'];
+
+            isK2Upload = k2Uploaded === 'true';
+            isK2Base64 = k2Base64 === 'true';
+            k2OriginalSize = parseInt(k2Size || '0');
+
+            console.log("K2 Metadata found:", {
+                k2Uploaded,
+                k2Base64,
+                k2OriginalSize,
+                uploadDate: headResponse.headers['x-amz-meta-k2-upload-date']
+            });
+        } catch (e) {
+            console.log("Could not get metadata, assuming non-K2 upload");
+        }
+
+        // Now download the file
+        const getHeaders = createAWSSignatureV4(
             configuration,
             'GET',
             path,
@@ -1850,9 +1886,9 @@ async function onexecuteDownloadObject(
             's3'
         );
 
-        const response = await makeAwsRequest('GET', url, headers, null, configuration);
+        const response = await makeAwsRequest('GET', url, getHeaders, null, configuration);
 
-        // Extract filename from key (last part after /)
+        // Extract filename from key
         const fileName = key.split('/').pop() || key;
 
         // Get content
@@ -1865,108 +1901,80 @@ async function onexecuteDownloadObject(
             fileName,
             storedContentType,
             contentLength: content.length,
-            returnAsBase64,
-            first50Chars: content.substring(0, 50)
+            isK2Upload,
+            isK2Base64,
+            returnAsBase64
         });
 
         // Determine the actual content type based on file extension
         const extension = fileName.split('.').pop()?.toLowerCase() || '';
         const contentTypeMap: { [key: string]: string } = {
-            // Images
             'jpg': 'image/jpeg',
             'jpeg': 'image/jpeg',
             'png': 'image/png',
             'gif': 'image/gif',
-            'bmp': 'image/bmp',
-            'webp': 'image/webp',
-            'svg': 'image/svg+xml',
-            'ico': 'image/x-icon',
-
-            // Documents
             'pdf': 'application/pdf',
-            'doc': 'application/msword',
-            'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-            'xls': 'application/vnd.ms-excel',
-            'xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-            'ppt': 'application/vnd.ms-powerpoint',
-            'pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-
-            // Text
             'txt': 'text/plain',
-            'csv': 'text/csv',
             'json': 'application/json',
             'xml': 'application/xml',
             'html': 'text/html',
             'css': 'text/css',
-            'js': 'application/javascript',
-
-            // Archives
-            'zip': 'application/zip',
-            'rar': 'application/x-rar-compressed',
-            '7z': 'application/x-7z-compressed',
-            'tar': 'application/x-tar',
-            'gz': 'application/gzip',
-
-            // Other
-            'mp4': 'video/mp4',
-            'mp3': 'audio/mpeg',
-            'wav': 'audio/wav'
+            'js': 'application/javascript'
         };
 
-        // Use the mapped content type or fall back to stored/default
-        let actualContentType = contentTypeMap[extension];
-        if (!actualContentType) {
-            actualContentType = storedContentType || 'application/octet-stream';
-        }
+        let actualContentType = contentTypeMap[extension] || storedContentType || 'application/octet-stream';
 
-        // Check if content is already base64 (files uploaded with our broker)
-        const isBase64Content = /^[A-Za-z0-9+/]+=*$/.test(content.trim());
-
-        // Check if this is a binary file type
+        // Check if this is a text file type
         const textExtensions = ['txt', 'json', 'xml', 'html', 'css', 'js', 'csv'];
         const isTextFile = textExtensions.includes(extension) || actualContentType.startsWith('text/');
 
         let finalContent: string;
+        let finalSize = originalSize;
 
-        if (returnAsBase64) {
-            // User wants base64 output
-            if (isBase64Content && !isTextFile) {
-                // Binary file already stored as base64 - return as-is
-                console.log("ReturnAsBase64=true: Binary file already base64, returning as-is");
+        if (isK2Upload && isK2Base64) {
+            // This file was uploaded via K2 broker as base64
+            // The content IS the base64 of the original file
+            console.log("File was uploaded via K2 as base64");
+
+            if (returnAsBase64) {
+                // Return the base64 as stored
                 finalContent = content.trim();
-            } else if (!isBase64Content) {
-                // Not base64, need to encode it
-                console.log("ReturnAsBase64=true: Encoding content to base64");
-                finalContent = Base64.encode(content);
+                finalSize = k2OriginalSize || originalSize;
+                console.log("Returning stored base64 content");
             } else {
-                // Already base64 (text file stored as base64)
-                console.log("ReturnAsBase64=true: Already base64, returning as-is");
-                finalContent = content.trim();
-            }
-        } else {
-            // User wants raw content (file stream)
-            if (isBase64Content && !isTextFile) {
-                // Binary file stored as base64 - decode it
-                console.log("ReturnAsBase64=false: Decoding base64 binary file");
+                // Decode to get original binary
                 try {
                     finalContent = Base64.decodeBinary(content.trim());
+                    finalSize = finalContent.length;
+                    console.log("Decoded base64 to original binary");
                 } catch (e) {
-                    console.error("Failed to decode base64:", e);
-                    // Fall back to returning as-is
+                    console.error("Failed to decode K2 base64:", e);
                     finalContent = content;
                 }
-            } else if (isBase64Content && isTextFile) {
-                // Text file stored as base64 - decode it
-                console.log("ReturnAsBase64=false: Decoding base64 text file");
-                try {
-                    finalContent = Base64.decode(content.trim());
-                } catch (e) {
-                    console.error("Failed to decode base64:", e);
-                    finalContent = content;
-                }
+            }
+        } else if (isK2Upload && !isK2Base64) {
+            // Text file uploaded via K2
+            console.log("Text file uploaded via K2");
+
+            if (returnAsBase64) {
+                finalContent = Base64.encode(content);
             } else {
-                // Already raw content
-                console.log("ReturnAsBase64=false: Returning raw content");
+                finalContent = content;
+            }
+        } else {
+            // File not uploaded via K2 broker
+            console.log("File was NOT uploaded via K2 broker");
+
+            if (!isTextFile) {
+                // Binary file - will be corrupted by XMLHttpRequest
+                console.warn("WARNING: Binary file not uploaded via K2 - data will be corrupted!");
+                console.warn("For binary files, please upload through K2 broker or use pre-signed URLs");
+            }
+
+            if (returnAsBase64) {
+                // Encode whatever we got (may be corrupted if binary)
+                finalContent = Base64.encode(content);
+            } else {
                 finalContent = content;
             }
         }
@@ -1974,10 +1982,10 @@ async function onexecuteDownloadObject(
         postResult({
             Key: key,
             ContentType: actualContentType,
-            Size: originalSize,
+            Size: finalSize,
             FileContent: finalContent,
             FileName: fileName,
-            Status: 'Success'
+            Status: isK2Upload ? 'Success (K2 uploaded file)' : 'Success (External file - may be corrupted if binary)'
         });
 
     } catch (error: any) {
